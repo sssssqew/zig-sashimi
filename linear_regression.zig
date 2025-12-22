@@ -21,9 +21,10 @@ pub const Checkpoint = struct {
 /// Simple Regression Head with SIMD-accelerated inference and Gradient Descent.
 pub const RegressionHead = struct {
     weights: []f32,
-    bias: f32,
+    bias: f32 = 0.0,
     /// Tracking flag for memory-mapped storage to ensure safe resource deallocation.
     is_mmaped: bool = false,
+    mmap_raw: []u8 = &.{}, // Stores the original byte slice returned by mmap to ensure correct deallocation.
 
     /// Initializes weights with a uniform random distribution.
     pub fn init(allocator: std.mem.Allocator, input_dim: usize) !RegressionHead {
@@ -36,10 +37,10 @@ pub const RegressionHead = struct {
         for (weights) |*w| {
             w.* = random.float(f32) * 0.1;
         }
-        return .{ .weights = weights, .bias = 0.0 };
+        return .{ .weights = weights };
     }
 
-    pub fn deinit(self: *const RegressionHead, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *RegressionHead, allocator: std.mem.Allocator) void {
         self.freeWeights(allocator);
     }
 
@@ -159,17 +160,27 @@ pub const RegressionHead = struct {
 
     /// Disposes of weight memory depending on the allocation strategy (Heap vs. Mmap).
     fn freeWeights(self: *RegressionHead, allocator: std.mem.Allocator) void {
+        // 1. Prevent double-free by checking if weights are already deallocated.
         if (self.weights.len == 0) return;
 
         if (self.is_mmaped) {
-            // Unmap pages using POSIX syscall.
-            std.posix.munmap(@alignCast(std.mem.sliceAsBytes(self.weights)));
+            // 2. Memory-mapped deallocation logic.
+            if (self.mmap_raw.len > 0) {
+                // Cast to a page-aligned slice as required by POSIX munmap.
+                const aligned_bytes: []align(std.heap.page_size_min) const u8 = @alignCast(self.mmap_raw);
+                std.posix.munmap(aligned_bytes);
+            }
         } else {
-            // Release standard heap allocation.
+            // 3. Standard heap deallocation logic.
+            // If an error occurs here, it indicates an 'is_mmaped' flag mismatch.
             allocator.free(self.weights);
         }
+
+        // 4. Reset state to ensure the struct is in a clean, predictable state.
+        // This prevents accidental reuse of deallocated resources.
         self.weights = &.{};
-        self.bias = 0.0;
+        self.mmap_raw = &.{};
         self.is_mmaped = false;
+        self.bias = 0.0;
     }
 };
