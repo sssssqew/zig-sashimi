@@ -23,12 +23,12 @@ pub const RegressionHead = struct {
     weights: []f32,
     bias: f32 = 0.0,
     /// Tracking flag for memory-mapped storage to ensure safe resource deallocation.
-    is_mmaped: bool = false,
-    mmap_raw: []u8 = &.{}, // Stores the original byte slice returned by mmap to ensure correct deallocation.
+    isMmaped: bool = false,
+    mmapRaw: []u8 = &.{}, // Stores the original byte slice returned by mmap to ensure correct deallocation.
 
     /// Initializes weights with a uniform random distribution.
-    pub fn init(allocator: std.mem.Allocator, input_dim: usize) !RegressionHead {
-        const weights = try allocator.alloc(f32, input_dim);
+    pub fn init(allocator: std.mem.Allocator, inputLen: usize) !RegressionHead {
+        const weights = try allocator.alloc(f32, inputLen);
 
         // Deterministic seeding for reproducible weight initialization.
         var prng = std.Random.DefaultPrng.init(12345);
@@ -51,26 +51,26 @@ pub const RegressionHead = struct {
 
         const len = input.len;
         // Determine optimal vector width for the target architecture (SSE/AVX/NEON).
-        const vector_size = std.simd.suggestVectorLength(f32) orelse 4;
-        var sum_vector: @Vector(vector_size, f32) = @splat(0.0);
+        const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
+        var sumVector: @Vector(vectorSize, f32) = @splat(0.0);
 
         var i: usize = 0;
         // Primary SIMD processing loop.
-        while (i + vector_size <= len) : (i += vector_size) {
-            const v_input: @Vector(vector_size, f32) = input[i..][0..vector_size].*;
-            const v_weight: @Vector(vector_size, f32) = self.weights[i..][0..vector_size].*;
-            sum_vector += v_input * v_weight;
+        while (i + vectorSize <= len) : (i += vectorSize) {
+            const vInput: @Vector(vectorSize, f32) = input[i..][0..vectorSize].*;
+            const vWeight: @Vector(vectorSize, f32) = self.weights[i..][0..vectorSize].*;
+            sumVector += vInput * vWeight;
         }
 
         // Horizontal addition of vector lanes.
-        var total_sum: f32 = @reduce(.Add, sum_vector);
+        var totalSum: f32 = @reduce(.Add, sumVector);
 
         // Scalar fallback for remaining elements (tail handling).
         while (i < len) : (i += 1) {
-            total_sum += input[i] * self.weights[i];
+            totalSum += input[i] * self.weights[i];
         }
 
-        return total_sum + self.bias;
+        return totalSum + self.bias;
     }
 
     /// Computes the Squared Error loss for the given prediction.
@@ -134,7 +134,7 @@ pub const RegressionHead = struct {
     /// Loads model state using standard heap allocation.
     pub fn loadModel(self: *RegressionHead, filename: []const u8, allocator: std.mem.Allocator) !Checkpoint {
         const cp = try persistence.Storage.load(allocator, filename, Checkpoint);
-        self.updateFromCheckpoint(allocator, cp, false);
+        self.updateFromCheckpoint(allocator, cp, false, &.{});
         std.debug.print("Model loaded from disk: {s}\n", .{filename});
         return cp;
     }
@@ -142,20 +142,23 @@ pub const RegressionHead = struct {
     /// High-performance model loading using zero-copy Memory Mapping (mmap).
     /// Provides near-instant access to large weight buffers.
     pub fn loadModelMmap(self: *RegressionHead, filename: []const u8, allocator: std.mem.Allocator) !Checkpoint {
-        const cp = try persistence.Storage.loadMmap(filename, Checkpoint);
-        self.updateFromCheckpoint(allocator, cp, true);
+        const mmapResult = try persistence.Storage.loadMmap(filename, Checkpoint);
+        const cp = mmapResult.data;
+
+        self.updateFromCheckpoint(allocator, cp, true, mmapResult.raw);
         std.debug.print("Model mmapped for high-speed access: {s}\n", .{filename});
         return cp;
     }
 
     /// Synchronizes the model state with a loaded checkpoint, handling memory transitions.
-    fn updateFromCheckpoint(self: *RegressionHead, allocator: std.mem.Allocator, cp: Checkpoint, isMmap: bool) void {
+    fn updateFromCheckpoint(self: *RegressionHead, allocator: std.mem.Allocator, cp: Checkpoint, isMmap: bool, raw: []u8) void {
         self.freeWeights(allocator);
         std.debug.assert(self.weights.len == 0);
 
         self.weights = cp.weights;
         self.bias = cp.bias;
-        self.is_mmaped = isMmap;
+        self.isMmaped = isMmap;
+        self.mmapRaw = raw;
     }
 
     /// Disposes of weight memory depending on the allocation strategy (Heap vs. Mmap).
@@ -163,24 +166,24 @@ pub const RegressionHead = struct {
         // 1. Prevent double-free by checking if weights are already deallocated.
         if (self.weights.len == 0) return;
 
-        if (self.is_mmaped) {
+        if (self.isMmaped) {
             // 2. Memory-mapped deallocation logic.
-            if (self.mmap_raw.len > 0) {
+            if (self.mmapRaw.len > 0) {
                 // Cast to a page-aligned slice as required by POSIX munmap.
-                const aligned_bytes: []align(std.heap.page_size_min) const u8 = @alignCast(self.mmap_raw);
-                std.posix.munmap(aligned_bytes);
+                const alignedBytes: []align(std.heap.page_size_min) const u8 = @alignCast(self.mmapRaw);
+                std.posix.munmap(alignedBytes);
             }
         } else {
             // 3. Standard heap deallocation logic.
-            // If an error occurs here, it indicates an 'is_mmaped' flag mismatch.
+            // If an error occurs here, it indicates an 'isMmaped' flag mismatch.
             allocator.free(self.weights);
         }
 
         // 4. Reset state to ensure the struct is in a clean, predictable state.
         // This prevents accidental reuse of deallocated resources.
         self.weights = &.{};
-        self.mmap_raw = &.{};
-        self.is_mmaped = false;
+        self.mmapRaw = &.{};
+        self.isMmaped = false;
         self.bias = 0.0;
     }
 };

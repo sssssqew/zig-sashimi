@@ -22,13 +22,13 @@ pub const Storage = struct {
         try writeAnyInt(file, u32, @as(u32, @intCast(@sizeOf(T))));
 
         // Structural metadata for runtime validation
-        const field_count: u32 = if (@typeInfo(T) == .@"struct") @intCast(@typeInfo(T).@"struct".fields.len) else 0;
-        try writeAnyInt(file, u32, field_count);
+        const fieldCount: u32 = if (@typeInfo(T) == .@"struct") @intCast(@typeInfo(T).@"struct".fields.len) else 0;
+        try writeAnyInt(file, u32, fieldCount);
 
         // Type reflection: Store type name for debugging and safety
-        const type_name = @typeName(T);
-        try writeAnyInt(file, u32, @intCast(type_name.len));
-        try file.writeAll(type_name);
+        const typeName = @typeName(T);
+        try writeAnyInt(file, u32, @intCast(typeName.len));
+        try file.writeAll(typeName);
 
         // Payload Section: Recursive data serialization
         try writeValue(file, data);
@@ -41,26 +41,26 @@ pub const Storage = struct {
         defer file.close();
 
         // Integrity Check: Verify File Signature
-        var magic_buf: [4]u8 = undefined;
-        try readFull(file, &magic_buf);
-        if (!std.mem.eql(u8, &magic_buf, GLOBAL_MAGIC)) return error.InvalidMagicNumber;
+        var magicBuf: [4]u8 = undefined;
+        try readFull(file, &magicBuf);
+        if (!std.mem.eql(u8, &magicBuf, GLOBAL_MAGIC)) return error.InvalidMagicNumber;
 
         // Versioning Check: Prevent loading of future protocol versions
         const ver = try readAnyInt(file, u32);
         if (ver > ENGINE_VERSION) return error.UnsupportedVersion;
 
         // Type Consistency Check: Verify struct size and field parity
-        const saved_size = try readAnyInt(file, u32);
-        if (saved_size != @sizeOf(T)) return error.TypeSizeMismatch;
+        const savedSize = try readAnyInt(file, u32);
+        if (savedSize != @sizeOf(T)) return error.TypeSizeMismatch;
 
-        const saved_fields = try readAnyInt(file, u32);
-        if (@typeInfo(T) == .@"struct" and saved_fields != @typeInfo(T).@"struct".fields.len) {
+        const savedFields = try readAnyInt(file, u32);
+        if (@typeInfo(T) == .@"struct" and savedFields != @typeInfo(T).@"struct".fields.len) {
             return error.StructFieldCountMismatch;
         }
 
         // Skip type name metadata segment
-        const name_len = try readAnyInt(file, u32);
-        try file.seekBy(@intCast(name_len));
+        const nameLen = try readAnyInt(file, u32);
+        try file.seekBy(@intCast(nameLen));
 
         // Recursive deserialization into the target type
         return try readValue(allocator, file, T);
@@ -88,8 +88,8 @@ pub const Storage = struct {
             .int => return std.mem.readInt(AnyT, &buf, .little),
             .float => {
                 const IntT = std.meta.Int(.unsigned, @sizeOf(AnyT) * 8);
-                const int_val = std.mem.readInt(IntT, &buf, .little);
-                return @bitCast(int_val);
+                const intVal = std.mem.readInt(IntT, &buf, .little);
+                return @bitCast(intVal);
             },
             else => unreachable,
         }
@@ -183,49 +183,50 @@ pub const Storage = struct {
     /// Robust wrapper around the file read syscall to ensure the entire buffer is populated.
     /// Handles partial reads and prevents premature EndOfStream errors.
     fn readFull(file: std.fs.File, buffer: []u8) !void {
-        var total_read: usize = 0;
-        while (total_read < buffer.len) {
-            const n = try file.read(buffer[total_read..]);
+        var totalRead: usize = 0;
+        while (totalRead < buffer.len) {
+            const n = try file.read(buffer[totalRead..]);
             if (n == 0) return error.EndOfStream;
-            total_read += n;
+            totalRead += n;
         }
     }
 
     /// Maps the binary file directly into the virtual address space (Zero-Copy Deserialization).
     /// Optimized for large-scale weight buffers, reducing memory overhead and startup latency.
     /// Highly effective in resource-constrained environments like embedded systems or edge devices.
-    pub fn loadMmap(filename: []const u8, comptime T: type) !T {
+    pub fn loadMmap(filename: []const u8, comptime T: type) !struct { data: T, raw: []u8 } {
         var file = try std.fs.cwd().openFile(filename, .{});
         defer file.close();
 
         // Header Validation (Magic Number)
-        var magic_buf: [4]u8 = undefined;
-        try readFull(file, &magic_buf);
-        if (!std.mem.eql(u8, &magic_buf, GLOBAL_MAGIC)) return error.InvalidMagicNumber;
+        var magicBuf: [4]u8 = undefined;
+        try readFull(file, &magicBuf);
+        if (!std.mem.eql(u8, &magicBuf, GLOBAL_MAGIC)) return error.InvalidMagicNumber;
 
         // Skip metadata segment to locate the data offset
         _ = try readAnyInt(file, u32); // Version
         _ = try readAnyInt(file, u32); // Type size
         _ = try readAnyInt(file, u32); // Field count
-        const name_len = try readAnyInt(file, u32);
-        try file.seekBy(@intCast(name_len));
+        const nameLen = try readAnyInt(file, u32);
+        try file.seekBy(@intCast(nameLen));
 
-        const data_offset = try file.getPos();
-        const file_size = (try file.stat()).size;
+        const dataOffset = try file.getPos();
+        const fileSize = (try file.stat()).size;
 
         // Establish memory mapping using POSIX mmap
         const ptr = try std.posix.mmap(
             null,
-            file_size,
+            fileSize,
             std.posix.PROT.READ,
             .{ .TYPE = .PRIVATE },
             file.handle,
             0,
         );
 
-        var offset: usize = data_offset;
+        var offset: usize = dataOffset;
         // Reconstruct the data structure using pointers into the mapped buffer
-        return try readValueFromBuffer(ptr, &offset, T);
+        const result = try readValueFromBuffer(ptr, &offset, T);
+        return .{ .data = result, .raw = ptr };
     }
 
     /// Deserializes data directly from a memory buffer without additional allocations.
@@ -253,12 +254,12 @@ pub const Storage = struct {
                     // This satisfies the alignment requirements for @alignCast.
                     offset.* = (offset.* + 3) & ~@as(usize, 3);
 
-                    const total_bytes = len * @sizeOf(info.child);
-                    const raw_bytes = buffer[offset.*..][0..total_bytes];
+                    const totalBytes = len * @sizeOf(info.child);
+                    const rawBytes = buffer[offset.*..][0..totalBytes];
 
                     // Zero-copy conversion from byte buffer to typed slice
-                    const slice = std.mem.bytesAsSlice(info.child, raw_bytes);
-                    offset.* += total_bytes;
+                    const slice = std.mem.bytesAsSlice(info.child, rawBytes);
+                    offset.* += totalBytes;
                     return @alignCast(slice);
                 }
                 return error.NotSupportedForMmap;

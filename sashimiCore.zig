@@ -1,5 +1,5 @@
 const std = @import("std");
-const LinearRegression = @import("linear_regression.zig");
+const LinearRegression = @import("linearRegression.zig");
 
 // Define a data structure for a Fish
 /// Representation of biological metrics for the synthetic dataset.
@@ -74,9 +74,6 @@ pub fn main() !void {
     // letting the OS reclaim it upon process termination is acceptable for simple tests.)
 
     // const loadedModel = try head.loadModel("Train.bin", allocator);
-    // defer {
-    //     allocator.free(loadedModel.weights);
-    // }
     // std.debug.print("loaded Model: {any}\n", .{loadedModel});
 
     // Validation Phase: Forward pass inference on unseen data to assess predictive accuracy.
