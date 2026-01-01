@@ -62,11 +62,9 @@ zig run sashimiCore.zig
 ### S4 Engine Performance
 Below is the terminal output demonstrating the real-time signal processing and denoising results.
 
-![S4 Execution Log](https://github.com/sssssqew/zig-sashimi/issues/5#issue-3774031985)
+![S4 Execution Log](<img width="825" height="916" alt="Image" src="https://github.com/user-attachments/assets/fb1512ec-b208-4c0d-9787-c2da84fdb579" />)
 
 ### 📋 Full Terminal Output
-<details>
-<summary>Click to view full execution logs (S4 & Linear Regression)</summary>
 
 #### S4 Engine (Complex.zig)
 ```bash
@@ -132,11 +130,9 @@ To verify the core mathematical logic and training loops within the Zig ecosyste
 ### 📸 Training Visualization & Execution
 Below is the terminal execution showing the model's convergence through Gradient Descent.
 
-![Linear Regression Execution](https://github.com/sssssqew/zig-sashimi/issues/6#issue-3774035704)
+![Linear Regression Execution](<img width="944" height="515" alt="Image" src="https://github.com/user-attachments/assets/541993d6-8902-4c34-9a2d-7822b87574ae" />)
 
 ### 📋 Training Log Details
-<details>
-<summary><b>[Click to Expand]</b> Detailed Training Epochs & Loss Values</summary>
 
 ```bash
 Model persisted: Train_temp.bin (2 weights)
