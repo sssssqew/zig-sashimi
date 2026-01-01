@@ -25,8 +25,32 @@ The model was tested on a sequence of noisy sinusoidal signals. By updating the 
 - Predicted values closely track the target phase and amplitude.
 - System stability is maintained through weight normalization ($|A| < 1.0$).
 
+## 🧪 Additional Implementations
+
+### 1. Linear Regression from Scratch (`sashimiCore.zig`)
+As a foundation for more complex state-space modeling, I implemented a **Linear Regression model** using pure Zig.
+- **Core Logic:** Implemented Gradient Descent optimization without external math libraries.
+- **Feature:** Demonstrates memory-efficient data handling and basic predictive modeling within the Zig ecosystem.
+
+### 2. High-Performance DB API
+To showcase full-stack integration and backend engineering skills, I developed a custom DB API.
+- **Role:** Handles real-time data persistence and retrieval for signal processing results.
+- **Focus:** Optimized for low-latency data flow between the processing engine and the storage layer.
+
 ## 💻 Technical Stack
 - **Language**: Zig (0.16.0-dev.1484 or higher)
 - **Compiler**: Zig Nightly Build (Leveraging latest language features)
 - **Paradigm**: Low-level Systems Programming / Manual Memory Management
 - **Optimization**: Native SIMD vectorization (@Vector)
+
+## 🚀 How to Run
+
+Ensure you have **Zig 0.16.0-dev** installed.
+
+### Run S4 Engine (Main Research)
+```bash
+zig run Complex.zig
+
+### Run Linear Regression Model
+```bash
+zig run sashimiCore.zig
