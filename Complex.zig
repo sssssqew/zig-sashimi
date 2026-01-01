@@ -226,36 +226,72 @@ pub fn main() !void {
 
     std.debug.print("Starting S4 Model test..\n", .{});
 
-    const seq_len = 100;
+    const seq_len = 20;
+    const n_channels = 8;
     const dt: f32 = 0.1;
-    const a = Complex.init(-1.0, 2.0);
-    const b = Complex.init(1.0, 0.0);
-    const c = Complex.init(1.0, 0.0);
 
-    const disc = try Complex.discretize(dt, a, b);
+    var a_weights = [n_channels]Complex{
+        Complex.init(-1, 1.99),
+        Complex.init(-1, 2.0),
+        Complex.init(-1, 2.01),
+        Complex.init(-1, 5.0),
+        Complex.init(-1, 19.99),
+        Complex.init(-1, 20.1),
+        Complex.init(-1, 20),
+        Complex.init(-1, 20.01),
+    };
+    var b_weights = [n_channels]Complex{
+        Complex.init(1, 0),
+        Complex.init(1, 0),
+        Complex.init(1, 0),
+        Complex.init(1, 0),
+        Complex.init(1, 0),
+        Complex.init(1, 0),
+        Complex.init(1, 0),
+        Complex.init(1, 0),
+    };
+    var c_weights = [n_channels]Complex{
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+    };
+
+    for (0..n_channels) |i| {
+        const d = try Complex.discretize(dt, a_weights[i], b_weights[i]);
+        a_weights[i] = d.a_bar;
+        b_weights[i] = d.b_bar;
+    }
+
     const inputs = try allocator.alloc(Complex, seq_len);
     defer allocator.free(inputs);
 
     for (inputs, 0..) |*in, i| {
         const t = @as(f32, @floatFromInt(i)) * dt;
-        in.* = Complex.init(std.math.sin(t * 2.0), 0);
+        const signal = std.math.sin(t * 2.0);
+        const noise = std.math.sin(t * 20.0);
+        in.* = Complex.init(signal + noise, 0);
     }
 
-    const scan_results = try allocator.alloc(Complex, seq_len);
-    defer allocator.free(scan_results);
-    Complex.scan(inputs, disc.a_bar, disc.b_bar, Complex.init(0, 0), scan_results);
+    // const scan_results = try allocator.alloc(Complex, seq_len);
+    // defer allocator.free(scan_results);
+    // Complex.scan(inputs, disc.a_bar, disc.b_bar, Complex.init(0, 0), scan_results);
 
-    for (scan_results) |*res| {
-        res.* = res.*.mul(c);
-    }
+    // for (scan_results) |*res| {
+    //     res.* = res.*.mul(c);
+    // }
 
-    const kernel = try allocator.alloc(Complex, seq_len);
-    defer allocator.free(kernel);
-    Complex.generateKernel(disc.a_bar, disc.b_bar, Complex.init(1.0, 0.0), kernel);
+    // const kernel = try allocator.alloc(Complex, seq_len);
+    // defer allocator.free(kernel);
+    // Complex.generateKernel(disc.a_bar, disc.b_bar, Complex.init(1.0, 0.0), kernel);
 
-    const conv_results = try allocator.alloc(Complex, seq_len);
-    defer allocator.free(conv_results);
-    Complex.convolveSIMD(inputs, kernel, conv_results);
+    // const conv_results = try allocator.alloc(Complex, seq_len);
+    // defer allocator.free(conv_results);
+    // Complex.convolveSIMD(inputs, kernel, conv_results);
 
     // for (0..seq_len) |i| {
     //     std.debug.print("Step {d}    | {d:.3} + {d:.3}i | {d:.3} + {d:.3}i\n", .{
@@ -293,9 +329,6 @@ pub fn main() !void {
     // const final_y = conv_results[4].mul(c_train);
     // std.debug.print("final estimated output: {d:.1} + {d:.1}i (Target was {d:.1} + {d:.1}i)\n", .{ final_y.re, final_y.im, target.re, target.im });
 
-    var a_bar_train = disc.a_bar;
-    var b_bar_train = disc.b_bar;
-    var c_train = Complex.init(3.0, 0.0);
     const targets = try allocator.alloc(Complex, seq_len);
     defer allocator.free(targets);
 
@@ -304,47 +337,117 @@ pub fn main() !void {
         targets[i] = Complex.init(std.math.sin(t * 2.0), 0);
     }
 
-    for (0..5000) |epoch| {
-        var current_state = Complex.init(0.001, 0);
-
-        var total_grad_a = Complex.init(0, 0);
-        var total_grad_b = Complex.init(0, 0);
-        var total_grad_c = Complex.init(0, 0);
-        var total_loss: f32 = 0.0;
-
+    for (0..10000) |epoch| {
+        var total_loss: f32 = 0;
+        var total_grad_a = [n_channels]Complex{
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+        };
+        var total_grad_b = [n_channels]Complex{
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+        };
+        var total_grad_c = [n_channels]Complex{
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+        };
+        var states = [n_channels]Complex{
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+        };
+        var prevStates = [n_channels]Complex{
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+            Complex.init(0, 0),
+        };
         for (inputs, 0..) |u, i| {
-            const prev_state = current_state;
-            const ax = current_state.mul(a_bar_train);
-            const bu = u.mul(b_bar_train);
-            current_state = ax.add(bu);
+            var output = Complex.init(0, 0);
+            for (0..n_channels) |n| {
+                prevStates[n] = states[n];
+                const ax = states[n].mul(a_weights[n]);
+                const bu = u.mul(b_weights[n]);
+                states[n] = ax.add(bu);
 
-            const y = current_state.mul(c_train);
-            const err = y.sub(targets[i]);
-            const loss = ((y.re - targets[i].re) * (y.re - targets[i].re) + (y.im - targets[i].im) * (y.im - targets[i].im));
+                const y = states[n].mul(c_weights[n]);
+                output = output.add(y);
+            }
+            const err = output.sub(targets[i]);
+            const loss = ((output.re - targets[i].re) * (output.re - targets[i].re) + (output.im - targets[i].im) * (output.im - targets[i].im));
+            total_loss += loss;
 
             // 에러누적
-            total_grad_a = total_grad_a.add(err.mul(c_train.conj()).mul(prev_state.conj()));
-            total_grad_b = total_grad_b.add(err.mul(c_train.conj()).mul(u.conj()));
-            total_grad_c = total_grad_c.add(err.mul(current_state.conj()));
-            total_loss += loss;
+            for (0..n_channels) |n| {
+                total_grad_a[n] = total_grad_a[n].add(err.mul(c_weights[n].conj()).mul(prevStates[n].conj()));
+                total_grad_b[n] = total_grad_b[n].add(err.mul(c_weights[n].conj()).mul(u.conj()));
+                total_grad_c[n] = total_grad_c[n].add(err.mul(states[n].conj()));
+            }
         }
         // A,B,C update once
-        const inv_len = 1.0 / @as(f32, @floatFromInt(seq_len));
-        a_bar_train = a_bar_train.sub(total_grad_a.scale(0.5 * inv_len));
-        b_bar_train = b_bar_train.sub(total_grad_b.scale(0.01 * inv_len));
-        c_train = c_train.sub(total_grad_c.scale(0.1 * inv_len));
+        for (0..n_channels) |n| {
+            const inv_len = 1.0 / @as(f32, @floatFromInt(seq_len));
+            a_weights[n] = a_weights[n].sub(total_grad_a[n].scale(0.01 * inv_len));
+            b_weights[n] = b_weights[n].sub(total_grad_b[n].scale(0.05 * inv_len));
+            c_weights[n] = c_weights[n].sub(total_grad_c[n].scale(0.5 * inv_len));
 
-        if (epoch % 50 == 0) {
-            std.debug.print("Epoch {d}: Loss = {d:.6}, A = {d:.3} + {d:.3}i B = {d:.3} + {d:.3}i C = {d:.3} + {d:.3}i\n", .{ epoch, total_loss, a_bar_train.re, a_bar_train.im, b_bar_train.re, b_bar_train.im, c_train.re, c_train.im });
+            // a_weights[n].re = @min(a_weights[n].re, -0.01); // 시스템 안정성 확보
+
+            // const mag = std.math.sqrt(a_weights[n].re * a_weights[n].re + a_weights[n].im * a_weights[n].im);
+            // if (mag > 0.999) {
+            //     a_weights[n] = a_weights[n].scale(0.999 / mag);
+            // }
+            if (epoch % 500 == 0) {
+                if (n == 3)
+                    std.debug.print("Epoch {d} Channel {d}: Loss = {d:.6}, A = {d:.3} + {d:.3}i B = {d:.3} + {d:.3}i C = {d:.3} + {d:.3}i\n", .{ epoch, n, total_loss, a_weights[n].re, a_weights[n].im, b_weights[n].re, b_weights[n].im, c_weights[n].re, c_weights[n].im });
+            }
         }
     }
-    var test_state = Complex.init(0.0, 0.0);
+    var test_states = [n_channels]Complex{
+        Complex.init(0.0, 0.0),
+        Complex.init(0.0, 0.0),
+        Complex.init(0.0, 0.0),
+        Complex.init(0.0, 0.0),
+        Complex.init(0.0, 0.0),
+        Complex.init(0.0, 0.0),
+        Complex.init(0.0, 0.0),
+        Complex.init(0.0, 0.0),
+    };
     std.debug.print("\n--- Final Verification ---\n", .{});
-    for (inputs[0..50], 0..) |u, i| {
-        const next_state = test_state.mul(a_bar_train).add(u.mul(b_bar_train));
-        test_state = next_state;
-        const finalY = test_state.mul(c_train);
-
-        std.debug.print("Step {d}: Pred({d:.2} + {d:.2}i) vs Target({d:.2} + {d:.2}i)\n", .{ i, finalY.re, finalY.im, targets[i].re, targets[i].im });
+    for (inputs[0..10], 0..) |u, i| {
+        var output = Complex.init(0, 0);
+        for (0..n_channels) |n| {
+            const next_state = test_states[n].mul(a_weights[n]).add(u.mul(b_weights[n]));
+            const y = next_state.mul(c_weights[n]);
+            output = output.add(y);
+        }
+        std.debug.print("Step {d}: Pred({d:.2} + {d:.2}i) vs Target({d:.2} + {d:.2}i)\n", .{ i, output.re, output.im, targets[i].re, targets[i].im });
     }
 }
