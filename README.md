@@ -26,6 +26,7 @@ The model was tested on a sequence of noisy sinusoidal signals. By updating the 
 - System stability is maintained through weight normalization ($|A| < 1.0$).
 
 ## 💻 Technical Stack
-- **Language**: Zig (0.11.0+)
-- **Paradigm**: Systems Programming / Low-level AI Engineering
-- **Optimization**: SIMD Vectorization
+- **Language**: Zig (0.16.0-dev.1484 or higher)
+- **Compiler**: Zig Nightly Build (Leveraging latest language features)
+- **Paradigm**: Low-level Systems Programming / Manual Memory Management
+- **Optimization**: Native SIMD vectorization (@Vector)
