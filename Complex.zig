@@ -1,5 +1,6 @@
 const std = @import("std");
 
+/// Complex number structure for complex-valued neural network operations
 pub const Complex = struct {
     re: f32,
     im: f32,
@@ -11,18 +12,25 @@ pub const Complex = struct {
     pub fn init(re: f32, im: f32) Complex {
         return .{ .re = re, .im = im };
     }
+
+    /// Complex conjugation for gradient calculation and Hermitian operations
     pub fn conj(self: Complex) Complex {
         return .{ .re = self.re, .im = self.im * -1 };
     }
+
     pub fn add(self: Complex, other: Complex) Complex {
         return .{ .re = self.re + other.re, .im = self.im + other.im };
     }
+
     pub fn sub(self: Complex, other: Complex) Complex {
         return .{ .re = self.re - other.re, .im = self.im - other.im };
     }
+
     pub fn mul(self: Complex, other: Complex) Complex {
         return .{ .re = self.re * other.re - self.im * other.im, .im = self.re * other.im + self.im * other.re };
     }
+
+    /// SIMD-accelerated complex addition for high-performance sequence processing
     pub fn addSIMD(a: []const Complex, b: []const Complex, result: []Complex) void {
         const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
         const len = a.len;
@@ -41,7 +49,6 @@ pub const Complex = struct {
                 imB[j] = b[i + j].im;
             }
 
-            // calculate by simd
             const sumRe: @Vector(vectorSize, f32) = reA + reB;
             const sumIm: @Vector(vectorSize, f32) = imA + imB;
 
@@ -54,6 +61,8 @@ pub const Complex = struct {
             result[i] = a[i].add(b[i]);
         }
     }
+
+    /// SIMD-accelerated complex multiplication
     pub fn mulSIMD(a: []const Complex, b: []const Complex, result: []Complex) void {
         const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
         const len = a.len;
@@ -72,7 +81,6 @@ pub const Complex = struct {
                 imB[j] = b[i + j].im;
             }
 
-            // calculate by simd
             const mulRe: @Vector(vectorSize, f32) = (reA * reB) - (imA * imB);
             const mulIm: @Vector(vectorSize, f32) = (reA * imB) + (imA * reB);
 
@@ -85,9 +93,13 @@ pub const Complex = struct {
             result[i] = a[i].mul(b[i]);
         }
     }
+
+    /// Single time-step transition: x_t = A*x_{t-1} + B*u_t
     pub fn step(state: Complex, input: Complex, a: Complex, b: Complex) Complex {
         return a.mul(state).add(b.mul(input));
     }
+
+    /// Linear Recurrent Scan: Parallelizable alternative to standard RNN loops
     pub fn scan(inputs: []const Complex, a: Complex, b: Complex, initialState: Complex, results: []Complex) void {
         std.debug.assert(inputs.len == results.len);
 
@@ -97,12 +109,15 @@ pub const Complex = struct {
             result.* = state;
         }
     }
+
     pub fn addReal(self: Complex, s: f32) Complex {
         return .{ .re = self.re + s, .im = self.im };
     }
+
     pub fn scale(self: Complex, s: f32) Complex {
         return .{ .re = self.re * s, .im = self.im * s };
     }
+
     pub fn div(self: Complex, other: Complex) ComplexError!Complex {
         const denom = other.re * other.re + other.im * other.im;
         if (denom < 1e-12) return ComplexError.DivisionByZero;
@@ -113,6 +128,7 @@ pub const Complex = struct {
         return .{ .re = re, .im = im };
     }
 
+    /// Continuous-to-Discrete Bilinear Transformation (Tustin's Method)
     pub fn discretize(dt: f32, a: Complex, b: Complex) !struct { a_bar: Complex, b_bar: Complex } {
         std.debug.assert(dt > 0);
         if (dt <= 0) return error.InvalidTimeStep;
@@ -122,6 +138,8 @@ pub const Complex = struct {
         const db = try b.scale(dt).div(denom);
         return .{ .a_bar = da, .b_bar = db };
     }
+
+    /// SSM Kernel Generation: Expands state-space parameters into a convolutional filter
     pub fn generateKernel(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) void {
         if (result.len == 0) return;
         result[0] = c.mul(b_bar);
@@ -132,6 +150,7 @@ pub const Complex = struct {
             prev = k.*;
         }
     }
+
     pub fn convolve(inputs: []const Complex, kernel: []const Complex, outputs: []Complex) void {
         std.debug.assert(inputs.len == outputs.len);
         if (inputs.len != outputs.len) return;
@@ -146,6 +165,8 @@ pub const Complex = struct {
             o.* = sum;
         }
     }
+
+    /// High-performance convolution implementation using SIMD
     pub fn convolveSIMD(inputs: []const Complex, kernel: []const Complex, outputs: []Complex) void {
         std.debug.assert(inputs.len == outputs.len);
         if (inputs.len != outputs.len) return;
@@ -171,7 +192,6 @@ pub const Complex = struct {
                     reB[j] = kernel[idx].re;
                     imB[j] = kernel[idx].im;
                 }
-                // calculate by simd
                 const mulRe: @Vector(vectorSize, f32) = (reA * reB) - (imA * imB);
                 const mulIm: @Vector(vectorSize, f32) = (reA * imB) + (imA * reB);
                 sumReVector += mulRe;
@@ -188,6 +208,7 @@ pub const Complex = struct {
             o.* = Complex.init(totalSumRe, totalSumIm);
         }
     }
+
     pub fn mulScalarSIMD(scalar: Complex, array: []const Complex, result: []Complex) void {
         const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
         const len = array.len;
@@ -226,25 +247,19 @@ pub fn main() !void {
 
     std.debug.print("Starting S4 Model test..\n", .{});
 
+    // Configuration for Multi-channel State Space Model
     const seq_len = 20;
-    const n_channels = 8;
+    const n_channels = 4;
     const dt: f32 = 0.1;
 
+    // Weight Initialization (A, B, C parameters)
     var a_weights = [n_channels]Complex{
         Complex.init(-1, 1.99),
         Complex.init(-1, 2.0),
         Complex.init(-1, 2.01),
         Complex.init(-1, 5.0),
-        Complex.init(-1, 19.99),
-        Complex.init(-1, 20.1),
-        Complex.init(-1, 20),
-        Complex.init(-1, 20.01),
     };
     var b_weights = [n_channels]Complex{
-        Complex.init(1, 0),
-        Complex.init(1, 0),
-        Complex.init(1, 0),
-        Complex.init(1, 0),
         Complex.init(1, 0),
         Complex.init(1, 0),
         Complex.init(1, 0),
@@ -255,18 +270,16 @@ pub fn main() !void {
         Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
         Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
         Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
-        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
-        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
-        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
-        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
     };
 
+    // Pre-processing: Continuous to Discrete mapping
     for (0..n_channels) |i| {
         const d = try Complex.discretize(dt, a_weights[i], b_weights[i]);
         a_weights[i] = d.a_bar;
         b_weights[i] = d.b_bar;
     }
 
+    // Input Signal: Sinusoidal waves with high-frequency noise
     const inputs = try allocator.alloc(Complex, seq_len);
     defer allocator.free(inputs);
 
@@ -277,58 +290,7 @@ pub fn main() !void {
         in.* = Complex.init(signal + noise, 0);
     }
 
-    // const scan_results = try allocator.alloc(Complex, seq_len);
-    // defer allocator.free(scan_results);
-    // Complex.scan(inputs, disc.a_bar, disc.b_bar, Complex.init(0, 0), scan_results);
-
-    // for (scan_results) |*res| {
-    //     res.* = res.*.mul(c);
-    // }
-
-    // const kernel = try allocator.alloc(Complex, seq_len);
-    // defer allocator.free(kernel);
-    // Complex.generateKernel(disc.a_bar, disc.b_bar, Complex.init(1.0, 0.0), kernel);
-
-    // const conv_results = try allocator.alloc(Complex, seq_len);
-    // defer allocator.free(conv_results);
-    // Complex.convolveSIMD(inputs, kernel, conv_results);
-
-    // for (0..seq_len) |i| {
-    //     std.debug.print("Step {d}    | {d:.3} + {d:.3}i | {d:.3} + {d:.3}i\n", .{
-    //         i,
-    //         scan_results[i].re,
-    //         scan_results[i].im,
-    //         conv_results[i].re,
-    //         conv_results[i].im,
-    //     });
-    // }
-
-    // var c_train = Complex.init(0.1, 0.0);
-    // const target = Complex.init(23.7, 6.9);
-
-    // for (0..1000) |epoch| {
-    //     const x = conv_results[4];
-    //     const y = x.mul(c_train);
-
-    //     // const loss = (y.re - target.re) * (y.re - target.re) + (y.im - target.im) * (y.im - target.im);
-
-    //     const err = Complex.init(y.re - target.re, y.im - target.im);
-    //     const grad_re = err.re * x.re + err.im * x.im;
-    //     const grad_im = err.im * x.re - err.re * x.im;
-
-    //     c_train.re -= grad_re * 0.001;
-    //     c_train.im -= grad_im * 0.001;
-
-    //     // if (epoch % 50 == 0) {
-    //     //     std.debug.print("Epoch {d}: Loss = {d:.6}, Y={d:.3} + {d:.3}i\n", .{ epoch, loss, y.re, y.im });
-    //     // }
-    //     // if (epoch % 1 == 0) { // 모든 점을 다 찍어봅시다
-    //     //     std.debug.print("{d:.6}, {d:.6}\n", .{ c_train.re, c_train.im });
-    //     // }
-    // }
-    // const final_y = conv_results[4].mul(c_train);
-    // std.debug.print("final estimated output: {d:.1} + {d:.1}i (Target was {d:.1} + {d:.1}i)\n", .{ final_y.re, final_y.im, target.re, target.im });
-
+    // Target Signal: Denoised sinusoidal wave for supervised learning
     const targets = try allocator.alloc(Complex, seq_len);
     defer allocator.free(targets);
 
@@ -337,60 +299,20 @@ pub fn main() !void {
         targets[i] = Complex.init(std.math.sin(t * 2.0), 0);
     }
 
+    // Training Loop: Optimizing via Backpropagation Through Time (BPTT)
     for (0..10000) |epoch| {
         var total_loss: f32 = 0;
-        var total_grad_a = [n_channels]Complex{
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-        };
-        var total_grad_b = [n_channels]Complex{
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-        };
-        var total_grad_c = [n_channels]Complex{
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-        };
-        var states = [n_channels]Complex{
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-        };
-        var prevStates = [n_channels]Complex{
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-            Complex.init(0, 0),
-        };
+        var total_grad_a = [_]Complex{Complex.init(0, 0)} ** n_channels;
+        var total_grad_b = [_]Complex{Complex.init(0, 0)} ** n_channels;
+        var total_grad_c = [_]Complex{Complex.init(0, 0)} ** n_channels;
+
+        var states = [_]Complex{Complex.init(0, 0)} ** n_channels;
+        var prevStates = [_]Complex{Complex.init(0, 0)} ** n_channels;
+
         for (inputs, 0..) |u, i| {
             var output = Complex.init(0, 0);
+
+            // Forward Pass: Calculating recurrent states across channels
             for (0..n_channels) |n| {
                 prevStates[n] = states[n];
                 const ax = states[n].mul(a_weights[n]);
@@ -400,51 +322,47 @@ pub fn main() !void {
                 const y = states[n].mul(c_weights[n]);
                 output = output.add(y);
             }
+
+            // Objective: Minimize L2 Distance (MSE) between Prediction and Target
             const err = output.sub(targets[i]);
             const loss = ((output.re - targets[i].re) * (output.re - targets[i].re) + (output.im - targets[i].im) * (output.im - targets[i].im));
             total_loss += loss;
 
-            // 에러누적
+            // Backward Pass: Accumulate gradients using the Chain Rule (Sensitivity Analysis)
             for (0..n_channels) |n| {
                 total_grad_a[n] = total_grad_a[n].add(err.mul(c_weights[n].conj()).mul(prevStates[n].conj()));
                 total_grad_b[n] = total_grad_b[n].add(err.mul(c_weights[n].conj()).mul(u.conj()));
                 total_grad_c[n] = total_grad_c[n].add(err.mul(states[n].conj()));
             }
         }
-        // A,B,C update once
+
+        // Global Parameter Update once per epoch
         for (0..n_channels) |n| {
             const inv_len = 1.0 / @as(f32, @floatFromInt(seq_len));
+            // Applying Gradient Descent
             a_weights[n] = a_weights[n].sub(total_grad_a[n].scale(0.01 * inv_len));
             b_weights[n] = b_weights[n].sub(total_grad_b[n].scale(0.05 * inv_len));
             c_weights[n] = c_weights[n].sub(total_grad_c[n].scale(0.5 * inv_len));
 
-            // a_weights[n].re = @min(a_weights[n].re, -0.01); // 시스템 안정성 확보
-
-            // const mag = std.math.sqrt(a_weights[n].re * a_weights[n].re + a_weights[n].im * a_weights[n].im);
-            // if (mag > 0.999) {
-            //     a_weights[n] = a_weights[n].scale(0.999 / mag);
-            // }
-            if (epoch % 500 == 0) {
-                if (n == 3)
-                    std.debug.print("Epoch {d} Channel {d}: Loss = {d:.6}, A = {d:.3} + {d:.3}i B = {d:.3} + {d:.3}i C = {d:.3} + {d:.3}i\n", .{ epoch, n, total_loss, a_weights[n].re, a_weights[n].im, b_weights[n].re, b_weights[n].im, c_weights[n].re, c_weights[n].im });
+            // Spectral Radius Constraint: Enforce system stability (mag < 1.0)
+            const mag = std.math.sqrt(a_weights[n].re * a_weights[n].re + a_weights[n].im * a_weights[n].im);
+            if (mag > 0.999) {
+                a_weights[n] = a_weights[n].scale(0.999 / mag);
+            }
+            if (epoch % 1000 == 0) {
+                std.debug.print("Epoch {d} Channel {d}: Loss = {d:.6}, A = {d:.3} + {d:.3}i B = {d:.3} + {d:.3}i C = {d:.3} + {d:.3}i\n", .{ epoch, n, total_loss, a_weights[n].re, a_weights[n].im, b_weights[n].re, b_weights[n].im, c_weights[n].re, c_weights[n].im });
             }
         }
     }
-    var test_states = [n_channels]Complex{
-        Complex.init(0.0, 0.0),
-        Complex.init(0.0, 0.0),
-        Complex.init(0.0, 0.0),
-        Complex.init(0.0, 0.0),
-        Complex.init(0.0, 0.0),
-        Complex.init(0.0, 0.0),
-        Complex.init(0.0, 0.0),
-        Complex.init(0.0, 0.0),
-    };
+
+    // Evaluation: Final Inference on the training sequence
+    var test_states = [_]Complex{Complex.init(0.0, 0.0)} ** n_channels;
     std.debug.print("\n--- Final Verification ---\n", .{});
     for (inputs[0..10], 0..) |u, i| {
         var output = Complex.init(0, 0);
         for (0..n_channels) |n| {
             const next_state = test_states[n].mul(a_weights[n]).add(u.mul(b_weights[n]));
+            test_states[n] = next_state; // Update state for inference
             const y = next_state.mul(c_weights[n]);
             output = output.add(y);
         }
