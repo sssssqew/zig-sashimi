@@ -50,7 +50,9 @@ Ensure you have **Zig 0.16.0-dev** installed.
 ### Run S4 Engine (Main Research)
 ```bash
 zig run Complex.zig
+```
 
 ### Run Linear Regression Model
 ```bash
 zig run sashimiCore.zig
+```
