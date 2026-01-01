@@ -62,7 +62,7 @@ zig run sashimiCore.zig
 ### S4 Engine Performance
 Below is the terminal output demonstrating the real-time signal processing and denoising results.
 
-![S4 Execution Log](https://github.com/sssssqew/zig-sashimi/issues/5#issue-3774031985)
+![S4 Execution Log](https://private-user-images.githubusercontent.com/9676553/531302617-3feb652d-3e86-4825-b7ed-04ba9833179a.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NjcyMzYyMDIsIm5iZiI6MTc2NzIzNTkwMiwicGF0aCI6Ii85Njc2NTUzLzUzMTMwMjYxNy0zZmViNjUyZC0zZTg2LTQ4MjUtYjdlZC0wNGJhOTgzMzE3OWEucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDEwMSUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAxMDFUMDI1MTQyWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9NWFmNjUwNGQ2NDFjYjgzNWI1ODAzZDBjMjQ5MGNmMmExMjk0OWIyMmNiZDQ3MWFkZjVjZmNmMTZjMDY5ZmQyNyZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.hRSyQNYmjwQKsniROwuKDQD_v9IBV2Swf9t82sIizYM)
 
 ### 📋 Full Terminal Output
 
@@ -130,7 +130,7 @@ To verify the core mathematical logic and training loops within the Zig ecosyste
 ### 📸 Training Visualization & Execution
 Below is the terminal execution showing the model's convergence through Gradient Descent.
 
-![Linear Regression Execution](<img width="944" height="515" alt="Image" src="https://github.com/user-attachments/assets/541993d6-8902-4c34-9a2d-7822b87574ae" />)
+![Linear Regression Execution](https://private-user-images.githubusercontent.com/9676553/531302070-541993d6-8902-4c34-9a2d-7822b87574ae.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NjcyMzYzODQsIm5iZiI6MTc2NzIzNjA4NCwicGF0aCI6Ii85Njc2NTUzLzUzMTMwMjA3MC01NDE5OTNkNi04OTAyLTRjMzQtOWEyZC03ODIyYjg3NTc0YWUucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDEwMSUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAxMDFUMDI1NDQ0WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9YzVjNjk4YjUzNWUyNTM0ODc3NDdjMDg2ZmY4NjFhOTAwZjgzNzE5MjZkZjg0MGU2OGFmMTEwMDQ1YmQxNWEwYyZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.nH3UUF-f0JBS7qgmPXrF7g1cdUDoMFjROX1gEYBuvzk)
 
 ### 📋 Training Log Details
 
