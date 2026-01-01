@@ -62,7 +62,7 @@ zig run sashimiCore.zig
 ### S4 Engine Performance
 Below is the terminal output demonstrating the real-time signal processing and denoising results.
 
-![S4 Execution Log](https://github.com/user-attachments/assets/4b15de46-843e-4a82-bfc1-0ab4dc99f7d4)
+![S4 Execution Log](https://github.com/sssssqew/zig-sashimi/issues/5#issue-3774031985)
 
 ### 📋 Full Terminal Output
 
