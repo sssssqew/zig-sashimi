@@ -1,4 +1,6 @@
 const std = @import("std");
+const S4Layer = @import("S4.zig").S4Layer;
+const S4Trainer = @import("S4Trainer.zig");
 
 /// Complex number structure for complex-valued neural network operations
 pub const Complex = struct {
@@ -248,16 +250,21 @@ pub fn main() !void {
     std.debug.print("Starting S4 Model test..\n", .{});
 
     // Configuration for Multi-channel State Space Model
-    const seq_len = 20;
+    const seq_len: usize = 2000;
     const n_channels = 4;
     const dt: f32 = 0.1;
+    const myConfig = S4Trainer.TrainConfig{
+        .epochs = 2000,
+    };
+    const myLayer = try S4Layer.init(allocator, n_channels, 128, 128, dt);
+    defer myLayer.deinit();
 
     // Weight Initialization (A, B, C parameters)
     var a_weights = [n_channels]Complex{
-        Complex.init(-1, 1.99),
+        Complex.init(-1, 0.5),
         Complex.init(-1, 2.0),
-        Complex.init(-1, 2.01),
-        Complex.init(-1, 5.0),
+        Complex.init(-1, 10.0),
+        Complex.init(-1, 30.0),
     };
     var b_weights = [n_channels]Complex{
         Complex.init(1, 0),
@@ -265,18 +272,16 @@ pub fn main() !void {
         Complex.init(1, 0),
         Complex.init(1, 0),
     };
-    var c_weights = [n_channels]Complex{
-        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
-        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
-        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
-        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
-    };
+
+    for (myLayer.c_coeffs) |*c| {
+        c.* = Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0);
+    }
 
     // Pre-processing: Continuous to Discrete mapping
-    for (0..n_channels) |i| {
-        const d = try Complex.discretize(dt, a_weights[i], b_weights[i]);
-        a_weights[i] = d.a_bar;
-        b_weights[i] = d.b_bar;
+    for (0..n_channels) |n| {
+        const d = try Complex.discretize(dt, a_weights[n], b_weights[n]);
+        myLayer.a_bars[n] = d.a_bar;
+        myLayer.b_bars[n] = d.b_bar;
     }
 
     // Input Signal: Sinusoidal waves with high-frequency noise
@@ -299,71 +304,18 @@ pub fn main() !void {
         targets[i] = Complex.init(std.math.sin(t * 2.0), 0);
     }
 
-    // Training Loop: Optimizing via Backpropagation Through Time (BPTT)
-    for (0..10000) |epoch| {
-        var total_loss: f32 = 0;
-        var total_grad_a = [_]Complex{Complex.init(0, 0)} ** n_channels;
-        var total_grad_b = [_]Complex{Complex.init(0, 0)} ** n_channels;
-        var total_grad_c = [_]Complex{Complex.init(0, 0)} ** n_channels;
-
-        var states = [_]Complex{Complex.init(0, 0)} ** n_channels;
-        var prevStates = [_]Complex{Complex.init(0, 0)} ** n_channels;
-
-        for (inputs, 0..) |u, i| {
-            var output = Complex.init(0, 0);
-
-            // Forward Pass: Calculating recurrent states across channels
-            for (0..n_channels) |n| {
-                prevStates[n] = states[n];
-                const ax = states[n].mul(a_weights[n]);
-                const bu = u.mul(b_weights[n]);
-                states[n] = ax.add(bu);
-
-                const y = states[n].mul(c_weights[n]);
-                output = output.add(y);
-            }
-
-            // Objective: Minimize L2 Distance (MSE) between Prediction and Target
-            const err = output.sub(targets[i]);
-            const loss = ((output.re - targets[i].re) * (output.re - targets[i].re) + (output.im - targets[i].im) * (output.im - targets[i].im));
-            total_loss += loss;
-
-            // Backward Pass: Accumulate gradients using the Chain Rule (Sensitivity Analysis)
-            for (0..n_channels) |n| {
-                total_grad_a[n] = total_grad_a[n].add(err.mul(c_weights[n].conj()).mul(prevStates[n].conj()));
-                total_grad_b[n] = total_grad_b[n].add(err.mul(c_weights[n].conj()).mul(u.conj()));
-                total_grad_c[n] = total_grad_c[n].add(err.mul(states[n].conj()));
-            }
-        }
-
-        // Global Parameter Update once per epoch
-        for (0..n_channels) |n| {
-            const inv_len = 1.0 / @as(f32, @floatFromInt(seq_len));
-            // Applying Gradient Descent
-            a_weights[n] = a_weights[n].sub(total_grad_a[n].scale(0.01 * inv_len));
-            b_weights[n] = b_weights[n].sub(total_grad_b[n].scale(0.05 * inv_len));
-            c_weights[n] = c_weights[n].sub(total_grad_c[n].scale(0.5 * inv_len));
-
-            // Spectral Radius Constraint: Enforce system stability (mag < 1.0)
-            const mag = std.math.sqrt(a_weights[n].re * a_weights[n].re + a_weights[n].im * a_weights[n].im);
-            if (mag > 0.999) {
-                a_weights[n] = a_weights[n].scale(0.999 / mag);
-            }
-            if (epoch % 1000 == 0) {
-                std.debug.print("Epoch {d} Channel {d}: Loss = {d:.6}, A = {d:.3} + {d:.3}i B = {d:.3} + {d:.3}i C = {d:.3} + {d:.3}i\n", .{ epoch, n, total_loss, a_weights[n].re, a_weights[n].im, b_weights[n].re, b_weights[n].im, c_weights[n].re, c_weights[n].im });
-            }
-        }
-    }
+    //
+    try S4Trainer.trainTruncatedBPTT(myLayer, inputs, targets, myConfig);
 
     // Evaluation: Final Inference on the training sequence
     var test_states = [_]Complex{Complex.init(0.0, 0.0)} ** n_channels;
     std.debug.print("\n--- Final Verification ---\n", .{});
-    for (inputs[0..10], 0..) |u, i| {
+    for (inputs[0..500], 0..) |u, i| {
         var output = Complex.init(0, 0);
         for (0..n_channels) |n| {
-            const next_state = test_states[n].mul(a_weights[n]).add(u.mul(b_weights[n]));
+            const next_state = test_states[n].mul(myLayer.a_bars[n]).add(u.mul(myLayer.b_bars[n]));
             test_states[n] = next_state; // Update state for inference
-            const y = next_state.mul(c_weights[n]);
+            const y = next_state.mul(myLayer.c_coeffs[n]);
             output = output.add(y);
         }
         std.debug.print("Step {d}: Pred({d:.2} + {d:.2}i) vs Target({d:.2} + {d:.2}i)\n", .{ i, output.re, output.im, targets[i].re, targets[i].im });
