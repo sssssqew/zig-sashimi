@@ -33,6 +33,7 @@ pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []c
     // Training Loop: Optimizing via Backpropagation Through Time (BPTT)
     for (0..config.epochs) |epoch| {
         var start_idx: usize = 0;
+        // @memset(layer.states, Complex.init(0, 0));
 
         while (start_idx < inputs.len) : (start_idx += config.window_size) {
             var total_loss: f32 = 0;
@@ -40,7 +41,6 @@ pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []c
             @memset(total_grad_a, Complex.init(0, 0));
             @memset(total_grad_b, Complex.init(0, 0));
             @memset(total_grad_c, Complex.init(0, 0));
-            @memset(prevStates, Complex.init(0, 0));
 
             const end_idx = @min(start_idx + config.window_size, inputs.len);
             for (inputs[start_idx..end_idx], 0..) |u, i| {
@@ -82,11 +82,13 @@ pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []c
                 if (mag > 0.999) {
                     layer.a_bars[n] = layer.a_bars[n].scale(0.999 / mag);
                 }
-                if (epoch % 500 == 0) {
+                if (epoch % 50 == 0) {
                     std.debug.print("Epoch {d} Channel {d}: Loss = {d:.6}, A = {d:.3} + {d:.3}i B = {d:.3} + {d:.3}i C = {d:.3} + {d:.3}i\n", .{ epoch, n, total_loss, layer.a_bars[n].re, layer.a_bars[n].im, layer.b_bars[n].re, layer.b_bars[n].im, layer.c_coeffs[n].re, layer.c_coeffs[n].im });
                 }
             }
         }
+        // 커널 업데이트: 학습된 a, b, c를 다시 컨볼루션 커널로 변환 (추론을 위해)
+        // try layer.setupKernels();
     }
 }
 
