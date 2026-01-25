@@ -74,7 +74,7 @@ pub fn main() !void {
     // Evaluation: Final Inference on the training sequence
     var test_states = [_]Complex{Complex.init(0.0, 0.0)} ** n_channels;
     std.debug.print("\n--- Final Verification ---\n", .{});
-    for (inputs, 0..) |u, i| {
+    for (inputs[0..100], 0..) |u, i| {
         var output = Complex.init(0, 0);
         for (0..n_channels) |n| {
             const next_state = test_states[n].mul(myLayer.a_bars[n]).add(u.mul(myLayer.b_bars[n]));
