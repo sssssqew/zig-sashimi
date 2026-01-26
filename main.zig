@@ -3,6 +3,22 @@ const S4Layer = @import("S4.zig").S4Layer;
 const S4Trainer = @import("S4Trainer.zig");
 const Complex = @import("Complex.zig").Complex;
 
+fn generateSignal(freq: f32, t: f32) Complex {
+    return std.math.sin(freq * t);
+}
+fn generateDataset(allocator: std.mem.Allocator, seqLen: usize, dt: f32) ![]Complex {
+    const dataset = try allocator.alloc(Complex, seqLen);
+    defer allocator.free(dataset);
+
+    for (dataset, 0..) |*d, i| {
+        const t = @as(f32, @floatFromInt(i)) * dt;
+        const signal = generateSignal(2.0, t);
+        const noise = generateSignal(20.0, t);
+        d.* = Complex.init(signal + noise, 0);
+    }
+    return dataset;
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -15,13 +31,11 @@ pub fn main() !void {
     const n_channels = 4;
     const dt: f32 = 0.2;
     const myConfig = S4Trainer.TrainConfig{
-        .lr_a = 0.005,
-        .lr_b = 0.025,
-        .lr_c = 0.2,
-        .epochs = 500,
+        .lr_a = 0.02,
+        .lr_b = 0.05,
+        .lr_c = 0.5,
+        .epochs = 1000,
     };
-    const myLayer = try S4Layer.init(allocator, n_channels, 128, 128, dt);
-    defer myLayer.deinit();
 
     // Weight Initialization (A, B, C parameters)
     var a_weights = [n_channels]Complex{
@@ -36,10 +50,15 @@ pub fn main() !void {
         Complex.init(1, 0),
         Complex.init(1, 0),
     };
+    var c_weights = [n_channels]Complex{
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+        Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0),
+    };
 
-    for (myLayer.c_coeffs) |*c| {
-        c.* = Complex.init(1.0 / @as(f32, @floatFromInt(n_channels)), 0);
-    }
+    const myLayer = try S4Layer.init(allocator, n_channels, 128, 128, dt, &a_weights, &b_weights, &c_weights);
+    defer myLayer.deinit();
 
     // Pre-processing: Continuous to Discrete mapping
     for (0..n_channels) |n| {

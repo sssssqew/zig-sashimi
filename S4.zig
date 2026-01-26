@@ -13,8 +13,10 @@ pub const S4Layer = struct {
     kernels: [][]Complex, // Pre-computed SSM Convolutional Kernels
     temp_buffer: []Complex, // Intermediate scratchpad for per-channel convolution
     output_buffer: []Complex, // Final aggregated output buffer
+    a_continuous: []Complex,
+    b_continuous: []Complex,
 
-    pub fn init(allocator: std.mem.Allocator, numChannels: usize, kernelLen: usize, inputLen: usize, dt: f32) !*S4Layer {
+    pub fn init(allocator: std.mem.Allocator, numChannels: usize, kernelLen: usize, inputLen: usize, dt: f32, A: []const Complex, B: []const Complex, C: []const Complex) !*S4Layer {
         const self = try allocator.create(S4Layer);
         errdefer self.deinit();
 
@@ -29,6 +31,8 @@ pub const S4Layer = struct {
             .kernels = &[_][]Complex{},
             .temp_buffer = &[_]Complex{},
             .output_buffer = &[_]Complex{},
+            .a_continuous = &[_]Complex{},
+            .b_continuous = &[_]Complex{},
         };
 
         // Memory allocation for SSM parameters and latent states
@@ -50,6 +54,14 @@ pub const S4Layer = struct {
         @memset(self.temp_buffer, Complex.init(0, 0));
         self.output_buffer = try allocator.alloc(Complex, inputLen);
         @memset(self.output_buffer, Complex.init(0, 0));
+
+        self.a_continuous = try allocator.alloc(Complex, numChannels);
+        self.b_continuous = try allocator.alloc(Complex, numChannels);
+
+        // 전달받은 가중치를 내부 메모리로 "복사"
+        @memcpy(self.a_continuous, A);
+        @memcpy(self.b_continuous, B);
+        @memcpy(self.c_coeffs, C);
 
         try self.setupKernels();
         return self;
@@ -73,25 +85,28 @@ pub const S4Layer = struct {
         if (self.states.len > 0) allocator.free(self.states);
         if (self.temp_buffer.len > 0) allocator.free(self.temp_buffer);
         if (self.output_buffer.len > 0) allocator.free(self.output_buffer);
+        if (self.a_continuous.len > 0) allocator.free(self.a_continuous);
+        if (self.b_continuous.len > 0) allocator.free(self.b_continuous);
 
         allocator.destroy(self);
+    }
+
+    pub fn updateDiscretizedParams(self: *S4Layer) !void {
+        for (self.a_bars, 0..) |_, n| {
+            // Define continuous-time dynamics (e.g., HiPPO-like initialization or oscillators)
+
+            // Numerical discretization to obtain discrete transition matrices
+            const discretized = try Complex.discretize(self.dt, self.a_continuous[n], self.b_continuous[n]);
+
+            self.a_bars[n] = discretized.a_bar;
+            self.b_bars[n] = discretized.b_bar;
+        }
     }
 
     /// Parameter Initialization and Discretization:
     /// Maps continuous-time SSM parameters to discrete-time kernels.
     pub fn setupKernels(self: *S4Layer) !void {
         for (self.a_bars, 0..) |_, n| {
-            // Define continuous-time dynamics (e.g., HiPPO-like initialization or oscillators)
-            const a_continuous = Complex.init(-0.5, @as(f32, @floatFromInt(n)) * std.math.pi);
-            const b_continuous = Complex.init(1.0, 0.0);
-
-            // Numerical discretization to obtain discrete transition matrices
-            const discretized = try Complex.discretize(self.dt, a_continuous, b_continuous);
-
-            self.c_coeffs[n] = Complex.init(1.0, 0.0);
-            self.a_bars[n] = discretized.a_bar;
-            self.b_bars[n] = discretized.b_bar;
-
             // Compute the S4 Convolution Kernel: K_i = C_bar * A_bar^i * B_bar
             Complex.generateKernel(self.a_bars[n], self.b_bars[n], self.c_coeffs[n], self.kernels[n]);
         }

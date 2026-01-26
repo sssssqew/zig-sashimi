@@ -13,7 +13,6 @@ pub const TrainConfig = struct {
 
 /// 1. 메모리 효율을 위해 끊어서 학습
 pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []const Complex, config: TrainConfig) !void {
-    // 여기에 지금 짜신 로직을 이식!
     // layer.a_bars, layer.b_bars 등을 업데이트하는 방식으로 구현
     const n_channels = layer.a_bars.len;
     const inv_len = 1.0 / @as(f32, @floatFromInt(config.window_size));
@@ -23,17 +22,20 @@ pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []c
     const total_grad_b = try layer.allocator.alloc(Complex, n_channels);
     const total_grad_c = try layer.allocator.alloc(Complex, n_channels);
     const prevStates = try layer.allocator.alloc(Complex, n_channels);
+    const params = struct { da_bar_da: Complex, db_bar_db: Complex, db_bar_da: Complex };
+    var paramsOfChannels = try layer.allocator.alloc(params, n_channels);
     defer {
         layer.allocator.free(total_grad_a);
         layer.allocator.free(total_grad_b);
         layer.allocator.free(total_grad_c);
         layer.allocator.free(prevStates);
+        layer.allocator.free(paramsOfChannels);
     }
 
     // Training Loop: Optimizing via Backpropagation Through Time (BPTT)
     for (0..config.epochs) |epoch| {
-        var start_idx: usize = 0;
         @memset(layer.states, Complex.init(0, 0));
+        var start_idx: usize = 0;
 
         while (start_idx < inputs.len) : (start_idx += config.window_size) {
             var total_loss: f32 = 0;
@@ -43,6 +45,12 @@ pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []c
             @memset(total_grad_c, Complex.init(0, 0));
 
             const end_idx = @min(start_idx + config.window_size, inputs.len);
+
+            for (0..n_channels) |n| {
+                const common_denom = Complex.init(2.0, 0).sub(layer.a_continuous[n].scale(layer.dt));
+                paramsOfChannels[n] = .{ .da_bar_da = try Complex.init(4.0 * layer.dt, 0).div(common_denom.square()), .db_bar_db = try Complex.init(2.0 * layer.dt, 0).div(common_denom), .db_bar_da = try Complex.init(2.0 * layer.dt * layer.dt, 0).mul(layer.b_continuous[n]).div(common_denom.square()) };
+            }
+
             for (inputs[start_idx..end_idx], 0..) |u, i| {
                 var output = Complex.init(0, 0);
 
@@ -64,8 +72,11 @@ pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []c
 
                 // Backward Pass: Accumulate gradients using the Chain Rule (Sensitivity Analysis)
                 for (0..n_channels) |n| {
-                    total_grad_a[n] = total_grad_a[n].add(err.mul(layer.c_coeffs[n].conj()).mul(prevStates[n].conj()));
-                    total_grad_b[n] = total_grad_b[n].add(err.mul(layer.c_coeffs[n].conj()).mul(u.conj()));
+                    const grad_a_bar = err.mul(layer.c_coeffs[n].conj()).mul(prevStates[n].conj());
+                    const grad_b_bar = err.mul(layer.c_coeffs[n].conj()).mul(u.conj());
+
+                    total_grad_a[n] = total_grad_a[n].add(grad_a_bar.mul(paramsOfChannels[n].da_bar_da).add(grad_b_bar.mul(paramsOfChannels[n].db_bar_da)));
+                    total_grad_b[n] = total_grad_b[n].add(grad_b_bar.mul(paramsOfChannels[n].db_bar_db));
                     total_grad_c[n] = total_grad_c[n].add(err.mul(layer.states[n].conj()));
                 }
             }
@@ -73,22 +84,19 @@ pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []c
             // Global Parameter Update once per epoch
             for (0..n_channels) |n| {
                 // Applying Gradient Descent
-                layer.a_bars[n] = layer.a_bars[n].sub(total_grad_a[n].scale(config.lr_a * inv_len));
-                layer.b_bars[n] = layer.b_bars[n].sub(total_grad_b[n].scale(config.lr_b * inv_len));
+                layer.a_continuous[n] = layer.a_continuous[n].sub(total_grad_a[n].scale(config.lr_a * inv_len));
+                layer.b_continuous[n] = layer.b_continuous[n].sub(total_grad_b[n].scale(config.lr_b * inv_len));
                 layer.c_coeffs[n] = layer.c_coeffs[n].sub(total_grad_c[n].scale(config.lr_c * inv_len));
 
-                // Spectral Radius Constraint: Enforce system stability (mag < 1.0)
-                const mag = std.math.sqrt(layer.a_bars[n].re * layer.a_bars[n].re + layer.a_bars[n].im * layer.a_bars[n].im);
-                if (mag > 0.999) {
-                    layer.a_bars[n] = layer.a_bars[n].scale(0.999 / mag);
-                }
-                if (epoch % 100 == 0) {
+                // Spectral Radius Constraint: Enforce system stability (A(re) < 0)
+                if (layer.a_continuous[n].re > -1e-4) layer.a_continuous[n].re = -1e-4;
+                if (epoch % 50 == 0) {
                     std.debug.print("Epoch {d} Channel {d}: Loss = {d:.6}, A = {d:.3} + {d:.3}i B = {d:.3} + {d:.3}i C = {d:.3} + {d:.3}i\n", .{ epoch, n, total_loss, layer.a_bars[n].re, layer.a_bars[n].im, layer.b_bars[n].re, layer.b_bars[n].im, layer.c_coeffs[n].re, layer.c_coeffs[n].im });
                 }
             }
+            // 커널 업데이트: 학습된 a, b, c를 다시 컨볼루션 커널로 변환 (추론을 위해)
+            try layer.updateDiscretizedParams();
         }
-        // 커널 업데이트: 학습된 a, b, c를 다시 컨볼루션 커널로 변환 (추론을 위해)
-        // try layer.setupKernels();
     }
 }
 

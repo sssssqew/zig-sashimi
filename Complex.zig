@@ -29,6 +29,9 @@ pub const Complex = struct {
     pub fn mul(self: Complex, other: Complex) Complex {
         return .{ .re = self.re * other.re - self.im * other.im, .im = self.re * other.im + self.im * other.re };
     }
+    pub fn square(self: Complex) Complex {
+        return .{ .re = self.re * self.re - self.im * self.im, .im = 2 * self.re * self.im };
+    }
 
     /// SIMD-accelerated complex addition for high-performance sequence processing
     pub fn addSIMD(a: []const Complex, b: []const Complex, result: []Complex) void {
