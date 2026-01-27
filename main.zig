@@ -27,22 +27,22 @@ pub fn main() !void {
     std.debug.print("Starting S4 Model test..\n", .{});
 
     // Configuration for Multi-channel State Space Model
-    const seq_len: usize = 2000;
+    const seq_len: usize = 1000;
     const n_channels = 4;
-    const dt: f32 = 0.2;
+    const dt: f32 = 0.1;
     const myConfig = S4Trainer.TrainConfig{
-        .lr_a = 0.02,
-        .lr_b = 0.05,
-        .lr_c = 0.5,
-        .epochs = 1000,
+        .lr_a = 0.9,
+        .lr_b = 0.9,
+        .lr_c = 0.9,
+        .epochs = 10000,
     };
 
     // Weight Initialization (A, B, C parameters)
     var a_weights = [n_channels]Complex{
-        Complex.init(-1, 0.5),
-        Complex.init(-1, 2.0),
-        Complex.init(-1, 10.0),
-        Complex.init(-1, 30.0),
+        Complex.init(-0.9, 0.5),
+        Complex.init(-0.9, 2.0),
+        Complex.init(-0.9, 10.0),
+        Complex.init(-0.9, 30.0),
     };
     var b_weights = [n_channels]Complex{
         Complex.init(1, 0),
@@ -59,13 +59,6 @@ pub fn main() !void {
 
     const myLayer = try S4Layer.init(allocator, n_channels, 128, 128, dt, &a_weights, &b_weights, &c_weights);
     defer myLayer.deinit();
-
-    // Pre-processing: Continuous to Discrete mapping
-    for (0..n_channels) |n| {
-        const d = try Complex.discretize(dt, a_weights[n], b_weights[n]);
-        myLayer.a_bars[n] = d.a_bar;
-        myLayer.b_bars[n] = d.b_bar;
-    }
 
     // Input Signal: Sinusoidal waves with high-frequency noise
     const inputs = try allocator.alloc(Complex, seq_len);
@@ -88,21 +81,22 @@ pub fn main() !void {
     }
 
     //
-    try S4Trainer.trainTruncatedBPTT(myLayer, inputs, targets, myConfig);
+    // try S4Trainer.trainTruncatedBPTT(myLayer, inputs, targets, myConfig);
+    try S4Trainer.trainFullBPTT(myLayer, inputs, targets, myConfig);
 
     // Evaluation: Final Inference on the training sequence
-    var test_states = [_]Complex{Complex.init(0.0, 0.0)} ** n_channels;
-    std.debug.print("\n--- Final Verification ---\n", .{});
-    for (inputs[0..100], 0..) |u, i| {
-        var output = Complex.init(0, 0);
-        for (0..n_channels) |n| {
-            const next_state = test_states[n].mul(myLayer.a_bars[n]).add(u.mul(myLayer.b_bars[n]));
-            test_states[n] = next_state; // Update state for inference
-            const y = next_state.mul(myLayer.c_coeffs[n]);
-            output = output.add(y);
-        }
-        std.debug.print("Step {d}: Pred({d:.2} + {d:.2}i) vs Target({d:.2} + {d:.2}i)\n", .{ i, output.re, output.im, targets[i].re, targets[i].im });
-    }
+    // var test_states = [_]Complex{Complex.init(0.0, 0.0)} ** n_channels;
+    // std.debug.print("\n--- Final Verification ---\n", .{});
+    // for (inputs[0..100], 0..) |u, i| {
+    //     var output = Complex.init(0, 0);
+    //     for (0..n_channels) |n| {
+    //         const next_state = test_states[n].mul(myLayer.a_bars[n]).add(u.mul(myLayer.b_bars[n]));
+    //         test_states[n] = next_state; // Update state for inference
+    //         const y = next_state.mul(myLayer.c_coeffs[n]);
+    //         output = output.add(y);
+    //     }
+    //     std.debug.print("Step {d}: Pred({d:.2} + {d:.2}i) vs Target({d:.2} + {d:.2}i)\n", .{ i, output.re, output.im, targets[i].re, targets[i].im });
+    // }
 
     // 5. 학습 후 결과 확인 (Convolutional 모드 사용 가능)
     // const output = try myLayer.forward(inputs);

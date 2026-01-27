@@ -63,6 +63,7 @@ pub const S4Layer = struct {
         @memcpy(self.b_continuous, B);
         @memcpy(self.c_coeffs, C);
 
+        try self.updateDiscretizedParams();
         try self.setupKernels();
         return self;
     }
