@@ -11,6 +11,112 @@ pub const TrainConfig = struct {
     window_size: usize = 128,
 };
 
+fn prepareFFTInputs(allocator: std.mem.Allocator, inputs: []const Complex) ![]Complex {
+    if (inputs.len == 0) return error.EmptyInput;
+    // 1. 필요한 N 크기 결정
+    const n = try std.math.ceilPowerOfTwo(usize, inputs.len);
+    // 2. 버퍼 할당
+    const buffer = try allocator.alloc(Complex, n);
+    errdefer allocator.free(buffer);
+    // 3. 데이터 복사 및 패딩
+    @memcpy(buffer[0..inputs.len], inputs);
+    @memset(buffer[inputs.len..], Complex.init(0, 0));
+
+    return buffer;
+}
+fn reverseBits(index: usize, n: usize) usize {
+    var result: usize = 0;
+    var tempIndex = index;
+    var count = std.math.log2(n); // 몇 비트인지 계산 (8이면 3비트)
+
+    while (count > 0) : (count -= 1) {
+        result = (result << 1) | (tempIndex & 1);
+        tempIndex >>= 1;
+    }
+    return result;
+}
+fn rearrange(data: []Complex) void {
+    const n = data.len;
+    for (0..n) |i| {
+        const j = reverseBits(i, n);
+        if (i < j) {
+            const temp = data[i];
+            data[i] = data[j];
+            data[j] = temp;
+        }
+    }
+}
+pub fn fft(data: []Complex, n: usize) void {
+    rearrange(data);
+    var step: usize = 2;
+    while (step <= n) : (step *= 2) {
+        var start: usize = 0;
+        while (start < n) : (start += step) {
+            var k: usize = 0;
+            const half = step / 2;
+            while (k < half) : (k += 1) {
+                const a = data[start + k];
+                const b = data[start + k + half];
+                const thetha = -2.0 * std.math.pi * @as(f32, @floatFromInt(k)) / @as(f32, @floatFromInt(step));
+                const w = Complex.init(std.math.cos(thetha), std.math.sin(thetha));
+                const temp = w.mul(b);
+                data[start + k] = a.add(temp);
+                data[start + k + half] = a.sub(temp);
+            }
+        }
+    }
+}
+pub fn ifft(data: []Complex, n: usize) void {
+    rearrange(data);
+    var step: usize = 2;
+    while (step <= n) : (step *= 2) {
+        var start: usize = 0;
+        while (start < n) : (start += step) {
+            var k: usize = 0;
+            const half = step / 2;
+            while (k < half) : (k += 1) {
+                const a = data[start + k];
+                const b = data[start + k + half];
+                const thetha = 2.0 * std.math.pi * @as(f32, @floatFromInt(k)) / @as(f32, @floatFromInt(step));
+                const w = Complex.init(std.math.cos(thetha), std.math.sin(thetha));
+                const temp = w.mul(b);
+                data[start + k] = a.add(temp);
+                data[start + k + half] = a.sub(temp);
+            }
+        }
+    }
+    for (data, 0..) |_, i| {
+        data[i].re /= @as(f32, @floatFromInt(n));
+        data[i].im /= @as(f32, @floatFromInt(n));
+    }
+}
+
+pub fn forwardConv(layer: *S4Layer, inputs: []const Complex) ![][]Complex {
+    // 1. 입력 패딩
+    const paddedInputs = try prepareFFTInputs(layer.allocator, inputs);
+    defer layer.allocator.free(paddedInputs);
+    const N = paddedInputs.len;
+
+    // 입력 신호를 주파수 영역으로 변환
+    fft(paddedInputs, N);
+
+    const output = try layer.allocator.alloc([]Complex, layer.a_bars.len);
+
+    // 2. 커널(필터) 생성 및 패딩
+    // layer.kernels는 이미 [N]Complex 형태여야 합니다.
+    // (시퀀스 길이에 맞춰 커널을 미리 생성해두는 함수가 필요할 수 있습니다)
+    // try layer.setupKernels();
+    for (layer.a_bars, 0..) |_, n| {
+        const paddedKernel = try prepareFFTInputs(layer.allocator, layer.kernels[n]);
+
+        fft(paddedKernel, N);
+        Complex.mulSIMD(paddedInputs, paddedKernel, paddedKernel);
+        ifft(paddedKernel, N);
+        output[n] = paddedKernel;
+    }
+    return output;
+}
+
 /// 1. 메모리 효율을 위해 끊어서 학습
 pub fn trainTruncatedBPTT(layer: *S4Layer, inputs: []const Complex, targets: []const Complex, config: TrainConfig) !void {
     // layer.a_bars, layer.b_bars 등을 업데이트하는 방식으로 구현
