@@ -11,13 +11,16 @@ pub const TrainConfig = struct {
     window_size: usize = 128,
 };
 
-fn prepareFFTInputs(allocator: std.mem.Allocator, inputs: []const Complex) ![]Complex {
+fn prepareFFTInputs(layer: *S4Layer, inputs: []const Complex) ![]Complex {
     if (inputs.len == 0) return error.EmptyInput;
-    // 1. 필요한 N 크기 결정
-    const n = try std.math.ceilPowerOfTwo(usize, inputs.len);
+    // 1. 필요한 N 크기 결정 Linear Convolution(선형 합성곱)
+    // RNN과 CNN의 결과가 다른 범인은 바로 **"선형 컨볼루션 vs 순환 컨볼루션"**의 차이
+    // 패딩 크기 N이 최소한 입력 길이 + 커널 길이 - 1 보다는 커야 합니다.
+    const required_len = inputs.len + layer.kernels[0].len;
+    const n = try std.math.ceilPowerOfTwo(usize, required_len);
     // 2. 버퍼 할당
-    const buffer = try allocator.alloc(Complex, n);
-    errdefer allocator.free(buffer);
+    const buffer = try layer.allocator.alloc(Complex, n);
+    errdefer layer.allocator.free(buffer);
     // 3. 데이터 복사 및 패딩
     @memcpy(buffer[0..inputs.len], inputs);
     @memset(buffer[inputs.len..], Complex.init(0, 0));
@@ -93,7 +96,7 @@ pub fn ifft(data: []Complex, n: usize) void {
 
 pub fn forwardConv(layer: *S4Layer, inputs: []const Complex) ![][]Complex {
     // 1. 입력 패딩
-    const paddedInputs = try prepareFFTInputs(layer.allocator, inputs);
+    const paddedInputs = try prepareFFTInputs(layer, inputs);
     defer layer.allocator.free(paddedInputs);
     const N = paddedInputs.len;
 
@@ -105,9 +108,9 @@ pub fn forwardConv(layer: *S4Layer, inputs: []const Complex) ![][]Complex {
     // 2. 커널(필터) 생성 및 패딩
     // layer.kernels는 이미 [N]Complex 형태여야 합니다.
     // (시퀀스 길이에 맞춰 커널을 미리 생성해두는 함수가 필요할 수 있습니다)
-    // try layer.setupKernels();
+    try layer.setupKernels();
     for (layer.a_bars, 0..) |_, n| {
-        const paddedKernel = try prepareFFTInputs(layer.allocator, layer.kernels[n]);
+        const paddedKernel = try prepareFFTInputs(layer, layer.kernels[n]);
 
         fft(paddedKernel, N);
         Complex.mulSIMD(paddedInputs, paddedKernel, paddedKernel);
