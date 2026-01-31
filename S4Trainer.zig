@@ -11,21 +11,10 @@ pub const TrainConfig = struct {
     window_size: usize = 128,
 };
 
-fn prepareFFTInputs(layer: *S4Layer, inputs: []const Complex) ![]Complex {
-    if (inputs.len == 0) return error.EmptyInput;
-    // 1. 필요한 N 크기 결정 Linear Convolution(선형 합성곱)
-    // RNN과 CNN의 결과가 다른 범인은 바로 **"선형 컨볼루션 vs 순환 컨볼루션"**의 차이
-    // 패딩 크기 N이 최소한 입력 길이 + 커널 길이 - 1 보다는 커야 합니다.
-    const required_len = inputs.len + layer.kernels[0].len;
-    const n = try std.math.ceilPowerOfTwo(usize, required_len);
-    // 2. 버퍼 할당
-    const buffer = try layer.allocator.alloc(Complex, n);
-    errdefer layer.allocator.free(buffer);
+fn prepareFFTInputs(buffer: []Complex, inputs: []const Complex) void {
     // 3. 데이터 복사 및 패딩
     @memcpy(buffer[0..inputs.len], inputs);
     @memset(buffer[inputs.len..], Complex.init(0, 0));
-
-    return buffer;
 }
 fn reverseBits(index: usize, n: usize) usize {
     var result: usize = 0;
@@ -49,7 +38,8 @@ fn rearrange(data: []Complex) void {
         }
     }
 }
-pub fn fft(data: []Complex, n: usize) void {
+fn fft(data: []Complex) void {
+    const n: usize = data.len;
     rearrange(data);
     var step: usize = 2;
     while (step <= n) : (step *= 2) {
@@ -69,7 +59,8 @@ pub fn fft(data: []Complex, n: usize) void {
         }
     }
 }
-pub fn ifft(data: []Complex, n: usize) void {
+fn ifft(data: []Complex) void {
+    const n: usize = data.len;
     rearrange(data);
     var step: usize = 2;
     while (step <= n) : (step *= 2) {
@@ -94,30 +85,29 @@ pub fn ifft(data: []Complex, n: usize) void {
     }
 }
 
-pub fn forwardConv(layer: *S4Layer, inputs: []const Complex) ![][]Complex {
-    // 1. 입력 패딩
-    const paddedInputs = try prepareFFTInputs(layer, inputs);
-    defer layer.allocator.free(paddedInputs);
-    const N = paddedInputs.len;
-
-    // 입력 신호를 주파수 영역으로 변환
-    fft(paddedInputs, N);
-
-    const output = try layer.allocator.alloc([]Complex, layer.a_bars.len);
+fn forwardConv(layer: *S4Layer, inputs: []const Complex) !void {
+    @memset(layer.output_buffer, Complex.init(0.0, 0.0)); // Reset output for accumulation
 
     // 2. 커널(필터) 생성 및 패딩
     // layer.kernels는 이미 [N]Complex 형태여야 합니다.
     // (시퀀스 길이에 맞춰 커널을 미리 생성해두는 함수가 필요할 수 있습니다)
-    try layer.setupKernels();
     for (layer.a_bars, 0..) |_, n| {
-        const paddedKernel = try prepareFFTInputs(layer, layer.kernels[n]);
+        prepareFFTInputs(layer.fft_result_buffer, layer.kernels[n]);
 
-        fft(paddedKernel, N);
-        Complex.mulSIMD(paddedInputs, paddedKernel, paddedKernel);
-        ifft(paddedKernel, N);
-        output[n] = paddedKernel;
+        fft(layer.fft_result_buffer);
+        Complex.mulSIMD(layer.fft_input_buffer, layer.fft_result_buffer, layer.fft_result_buffer);
+        ifft(layer.fft_result_buffer); // layer.fft_result_buffer: 특정 채널의 출력신호
+        Complex.addSIMD(layer.fft_result_buffer[0..inputs.len], layer.output_buffer, layer.output_buffer);
     }
-    return output;
+}
+pub fn predict(layer: *S4Layer, inputs: []const Complex) !void {
+    // 1. 입력 패딩
+    prepareFFTInputs(layer.fft_input_buffer, inputs);
+    // 입력 신호를 주파수 영역으로 변환
+    fft(layer.fft_input_buffer);
+
+    // 1. FFT 기반 (CNN 모드) 결과 얻기
+    try forwardConv(layer, inputs);
 }
 
 /// 1. 메모리 효율을 위해 끊어서 학습
@@ -343,7 +333,124 @@ pub fn trainFullBPTT(layer: *S4Layer, inputs: []const Complex, targets: []const 
     try layer.setupKernels();
 }
 
-// /// 3. 대규모 가속 학습 (내일의 목표)
-// pub fn trainConv(layer: *S4.S4Layer, inputs: []const Complex, targets: []const Complex) !void {
-//     // FFT 기반 학습 로직
-// }
+// 3. 대규모 가속 학습
+pub fn trainConv(layer: *S4Layer, inputs: []const Complex, targets: []const Complex, config: TrainConfig) !void {
+    const n_channels = layer.a_bars.len;
+    const seq_len = inputs.len;
+    const inv_len = 1.0 / @as(f32, @floatFromInt(seq_len));
+
+    // 1. 루프 시작 전 (또는 함수 초반) 메모리 할당
+    const total_grad_a = try layer.allocator.alloc(Complex, n_channels);
+    const total_grad_b = try layer.allocator.alloc(Complex, n_channels);
+    const total_grad_c = try layer.allocator.alloc(Complex, n_channels);
+
+    const params = struct { da_bar_da: Complex, db_bar_db: Complex, db_bar_da: Complex };
+    var paramsOfChannels = try layer.allocator.alloc(params, n_channels);
+
+    defer {
+        layer.allocator.free(total_grad_a);
+        layer.allocator.free(total_grad_b);
+        layer.allocator.free(total_grad_c);
+        layer.allocator.free(paramsOfChannels);
+    }
+
+    std.debug.assert(seq_len <= layer.output_buffer.len);
+    if (seq_len > layer.output_buffer.len) return error.InputLengthMisMatch;
+
+    // 1. 입력 패딩 및 입력 신호를 주파수 영역으로 변환
+    prepareFFTInputs(layer.fft_input_buffer, inputs);
+    fft(layer.fft_input_buffer);
+
+    for (0..config.epochs) |epoch| {
+        @memset(total_grad_a, Complex.init(0, 0));
+        @memset(total_grad_b, Complex.init(0, 0));
+        @memset(total_grad_c, Complex.init(0, 0));
+
+        // 2. 현재 파라미터(A, B)에 기반한 이산화 미분 계수 계산
+        for (0..n_channels) |n| {
+            const common_denom = Complex.init(2.0, 0).sub(layer.a_continuous[n].scale(layer.dt));
+            paramsOfChannels[n] = .{ .da_bar_da = try Complex.init(4.0 * layer.dt, 0).div(common_denom.square()), .db_bar_db = try Complex.init(2.0 * layer.dt, 0).div(common_denom), .db_bar_da = try Complex.init(2.0 * layer.dt * layer.dt, 0).mul(layer.b_continuous[n]).div(common_denom.square()) };
+        }
+
+        // 1. FFT 기반 (CNN 모드) 결과 얻기
+        try forwardConv(layer, inputs); // layer.output_buffer : 최종출력
+        // 2. 전체오차 계산
+        const total_loss = Complex.totalLossSIMD(layer.output_buffer, targets);
+        Complex.subSIMD(layer.output_buffer, targets, layer.output_buffer); // layer.output_buffer : 오차신호
+
+        // 여기서 정규화 추가 (SIMD를 쓰지 않아도 시퀀스 1000개 정도는 이 루프가 매우 빠릅니다)
+        for (layer.output_buffer) |*err| {
+            err.* = err.scale(inv_len);
+        }
+        // 3. 역전파
+
+        // 커널 기울기 구하기
+
+        // // fft 결과를 켤레 복소수로 변환
+        // Complex.conjSIMD(paddedInputs);
+
+        prepareFFTInputs(layer.fft_result_buffer, layer.output_buffer); // 커널 기울기
+
+        // 오차 신호를 주파수 영역으로 변환
+        fft(layer.fft_result_buffer);
+
+        Complex.mulSIMDWithConj(layer.fft_result_buffer, layer.fft_input_buffer, layer.fft_result_buffer);
+
+        // 시간 영역으로 복귀
+        ifft(layer.fft_result_buffer); // layer.fft_result_buffer : 커널 기울기
+
+        // 2. 채널별 파라미터 업데이트 루프
+        for (0..layer.a_bars.len) |n| {
+            // var grad_a = Complex.init(0, 0);
+            // var grad_b = Complex.init(0, 0);
+            // var grad_c = Complex.init(0, 0);
+
+            var a_pow = Complex.init(1, 0);
+            var a_pow_prev = Complex.init(1, 0);
+
+            for (0..seq_len) |i| {
+                const dL_dK = layer.fft_result_buffer[i]; // 공통의 커널 기울기
+
+                // 각 채널 n의 현재 파라미터 상태를 이용해 개별 기울기 추출
+                // C_n 미분
+                const grad_c = dL_dK.mul(a_pow.mul(layer.b_bars[n]));
+                // B_n 미분
+                const grad_b = dL_dK.mul(layer.c_coeffs[n].mul(a_pow));
+                // A_n 미분
+                var grad_a = Complex.init(0, 0);
+                if (i > 0) {
+                    const i_f = @as(f32, @floatFromInt(i));
+                    const term_a = Complex.init(i_f, 0).mul(layer.c_coeffs[n]).mul(layer.b_bars[n]).mul(a_pow_prev);
+                    grad_a = dL_dK.mul(term_a);
+                }
+
+                a_pow_prev = a_pow;
+                a_pow = a_pow.mul(layer.a_bars[n]);
+
+                // 4. 이산화 수식(Bilinear)을 고려한 최종 파라미터(A, B) 그라디언트 누적
+                total_grad_a[n] = total_grad_a[n].add(grad_a.mul(paramsOfChannels[n].da_bar_da).add(grad_b.mul(paramsOfChannels[n].db_bar_da)));
+                total_grad_b[n] = total_grad_b[n].add(grad_b.mul(paramsOfChannels[n].db_bar_db));
+                total_grad_c[n] = total_grad_c[n].add(grad_c);
+            }
+
+            // 3. 파라미터 업데이트 (SGD)
+            // layer.c_coeffs[n] = layer.c_coeffs[n].sub(grad_c.mul(config.lr_c));
+            // layer.b_bars[n] = layer.b_bars[n].sub(grad_b.mul(config.lr_b));
+            // layer.a_bars[n] = layer.a_bars[n].sub(grad_a.mul(config.lr_a));
+
+            layer.a_continuous[n] = layer.a_continuous[n].sub(total_grad_a[n].scale(config.lr_a));
+            layer.b_continuous[n] = layer.b_continuous[n].sub(total_grad_b[n].scale(config.lr_b));
+            layer.c_coeffs[n] = layer.c_coeffs[n].sub(total_grad_c[n].scale(config.lr_c));
+
+            // 안정성 제약 (Spectral Radius Constraint)
+            // S4의 핵심: 시스템이 발산하지 않도록 Re(A) < 0을 강제합니다.
+            if (layer.a_continuous[n].re > -0.1) layer.a_continuous[n].re = -0.1;
+            if (epoch % 100 == 0) {
+                std.debug.print("Epoch {d} Channel {d}: Loss = {d:.6}, A = {d:.3} + {d:.3}i B = {d:.3} + {d:.3}i C = {d:.3} + {d:.3}i\n", .{ epoch, n, total_loss, layer.a_bars[n].re, layer.a_bars[n].im, layer.b_bars[n].re, layer.b_bars[n].im, layer.c_coeffs[n].re, layer.c_coeffs[n].im });
+            }
+        }
+        // 커널 업데이트: 학습된 a, b, c를 다시 컨볼루션 커널로 변환 (추론을 위해)
+        try layer.updateDiscretizedParams();
+        try layer.setupKernels();
+    }
+}

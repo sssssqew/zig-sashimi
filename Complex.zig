@@ -32,6 +32,84 @@ pub const Complex = struct {
     pub fn square(self: Complex) Complex {
         return .{ .re = self.re * self.re - self.im * self.im, .im = 2 * self.re * self.im };
     }
+    pub fn mulSIMDWithConj(a: []const Complex, b: []const Complex, result: []Complex) void {
+        const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
+        const len = a.len;
+
+        var i: usize = 0;
+        while (i + vectorSize <= len) : (i += vectorSize) {
+            var reA: @Vector(vectorSize, f32) = undefined;
+            var imA: @Vector(vectorSize, f32) = undefined;
+            var reB: @Vector(vectorSize, f32) = undefined;
+            var imB: @Vector(vectorSize, f32) = undefined;
+
+            inline for (0..vectorSize) |j| { // load
+                reA[j] = a[i + j].re;
+                imA[j] = a[i + j].im;
+                reB[j] = b[i + j].re;
+                imB[j] = b[i + j].im;
+            }
+
+            const mulRe: @Vector(vectorSize, f32) = (reA * reB) - (imA * -imB);
+            const mulIm: @Vector(vectorSize, f32) = (reA * -imB) + (imA * reB);
+
+            inline for (0..vectorSize) |j| { // store
+                result[i + j].re = mulRe[j];
+                result[i + j].im = mulIm[j];
+            }
+        }
+        while (i < len) : (i += 1) {
+            result[i] = a[i].mul(b[i].conj());
+        }
+    }
+    pub fn conjSIMD(a: []const Complex) void {
+        const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
+        const len = a.len;
+
+        var i: usize = 0;
+        while (i + vectorSize <= len) : (i += vectorSize) {
+            var reA: @Vector(vectorSize, f32) = undefined;
+            var imA: @Vector(vectorSize, f32) = undefined;
+
+            inline for (0..vectorSize) |j| { // load
+                reA[j] = a[i + j].re;
+                imA[j] = a[i + j].im;
+            }
+            imA *= -1;
+            inline for (0..vectorSize) |j| { // store
+                a[i + j].re = reA[j];
+                a[i + j].im = imA[j];
+            }
+        }
+        while (i < len) : (i += 1) {
+            a[i] = a[i].conj();
+        }
+    }
+    pub fn totalLossSIMD(a: []const Complex, b: []const Complex) f32 {
+        const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
+        const len = a.len;
+        var total_sum: f32 = 0;
+
+        var i: usize = 0;
+        while (i + vectorSize <= len) : (i += vectorSize) {
+            var reDiff: @Vector(vectorSize, f32) = undefined;
+            var imDiff: @Vector(vectorSize, f32) = undefined;
+
+            inline for (0..vectorSize) |j| { // load
+                reDiff[j] = a[i + j].re - b[i + j].re;
+                imDiff[j] = a[i + j].im - b[i + j].im;
+            }
+
+            const norm = reDiff * reDiff + imDiff * imDiff;
+            total_sum += @reduce(.Add, norm);
+        }
+        while (i < len) : (i += 1) {
+            const r = a[i].re - b[i].re;
+            const im = a[i].im - b[i].im;
+            total_sum += r * r + im * im;
+        }
+        return total_sum;
+    }
 
     /// SIMD-accelerated complex addition for high-performance sequence processing
     pub fn addSIMD(a: []const Complex, b: []const Complex, result: []Complex) void {
@@ -62,6 +140,37 @@ pub const Complex = struct {
         }
         while (i < len) : (i += 1) {
             result[i] = a[i].add(b[i]);
+        }
+    }
+    /// SIMD-accelerated complex subtraction for high-performance sequence processing
+    pub fn subSIMD(a: []const Complex, b: []const Complex, result: []Complex) void {
+        const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
+        const len = a.len;
+
+        var i: usize = 0;
+        while (i + vectorSize <= len) : (i += vectorSize) {
+            var reA: @Vector(vectorSize, f32) = undefined;
+            var imA: @Vector(vectorSize, f32) = undefined;
+            var reB: @Vector(vectorSize, f32) = undefined;
+            var imB: @Vector(vectorSize, f32) = undefined;
+
+            inline for (0..vectorSize) |j| { // load
+                reA[j] = a[i + j].re;
+                imA[j] = a[i + j].im;
+                reB[j] = b[i + j].re;
+                imB[j] = b[i + j].im;
+            }
+
+            const sumRe: @Vector(vectorSize, f32) = reA - reB;
+            const sumIm: @Vector(vectorSize, f32) = imA - imB;
+
+            inline for (0..vectorSize) |j| { // store
+                result[i + j].re = sumRe[j];
+                result[i + j].im = sumIm[j];
+            }
+        }
+        while (i < len) : (i += 1) {
+            result[i] = a[i].sub(b[i]);
         }
     }
 
