@@ -130,7 +130,8 @@ pub const S4Layer = struct {
     pub fn setupKernels(self: *S4Layer) !void {
         for (self.a_bars, 0..) |_, n| {
             // Compute the S4 Convolution Kernel: K_i = C_bar * A_bar^i * B_bar
-            Complex.generateKernel(self.a_bars[n], self.b_bars[n], self.c_coeffs[n], self.kernels[n]);
+            // try Complex.generateKernel(self.a_bars[n], self.b_bars[n], self.c_coeffs[n], self.kernels[n]);
+            try Complex.generateKernelWithLog(self.a_bars[n], self.b_bars[n], self.c_coeffs[n], self.kernels[n]);
         }
     }
 

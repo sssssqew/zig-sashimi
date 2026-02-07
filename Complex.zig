@@ -252,14 +252,65 @@ pub const Complex = struct {
     }
 
     /// SSM Kernel Generation: Expands state-space parameters into a convolutional filter
-    pub fn generateKernel(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) void {
+    pub fn generateKernel(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) !void {
+        std.debug.assert(result.len != 0);
+        std.debug.assert(a_bar.mag() < 1.0);
         if (result.len == 0) return;
+        if (a_bar.mag() >= 1.0) return error.UnstableSystem;
+
         result[0] = c.mul(b_bar);
         var prev = result[0];
+        const threshold = 1e-9;
 
-        for (result[1..]) |*k| {
+        for (result[1..], 0..) |*k, i| {
             k.* = prev.mul(a_bar);
             prev = k.*;
+
+            if (k.mag() < threshold) { // A값이 0에 근접할때 조기종료
+                @memset(result[i + 1 ..], Complex.init(0, 0));
+                std.debug.print("--- Early Exit at t = {d} --- (M = {e})\n", .{ i, k.mag() });
+                break;
+            }
+        }
+    }
+
+    fn mag(self: Complex) f32 {
+        return std.math.sqrt(self.re * self.re + self.im * self.im);
+    }
+    fn phase(self: Complex) f32 {
+        return std.math.atan2(self.im, self.re);
+    }
+    pub fn ln(self: Complex) Complex {
+        return .{ .re = std.math.log(f32, std.math.e, self.mag()), .im = self.phase() };
+    }
+
+    pub fn generateKernelWithLog(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) !void {
+        std.debug.assert(result.len != 0);
+        std.debug.assert(a_bar.mag() < 1.0);
+        if (result.len == 0) return;
+        if (a_bar.mag() >= 1.0) return error.UnstableSystem;
+
+        const logA = a_bar.ln();
+        const logB = b_bar.ln();
+        const logC = c.ln();
+
+        const fixedRe = logC.re + logB.re;
+        const fixedIm = logC.im + logB.im;
+
+        const threshold = 1e-9;
+        for (result, 0..) |*r, i| {
+            const i_f = @as(f32, @floatFromInt(i));
+            const R = fixedRe + i_f * logA.re;
+            const I = fixedIm + i_f * logA.im;
+            const M = std.math.exp(R);
+
+            if (M < threshold) { // A값이 0에 근접할때 조기종료
+                @memset(result[i..], Complex.init(0, 0));
+                std.debug.print("--- Early Exit at t = {d} --- (M = {e})\n", .{ i, M });
+                break;
+            }
+
+            r.* = Complex.init(M * std.math.cos(I), M * std.math.sin(I));
         }
     }
 
