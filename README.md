@@ -73,14 +73,18 @@ This guide derives the gradients for $A, B, C$ in three different perspectives: 
 
 In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$:
 
+
+
 **Parameter $C$ Gradient**
-$$\frac{\partial L}{\partial C} = \text{err}_{t} \cdot \text{conj}(x_{t})$$
+$$\frac{\partial L}{\partial C} = e_{t} \cdot \text{conj}(x_{t})$$
 
 **Parameter $B$ Gradient**
-$$\frac{\partial L}{\partial B} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$
+$$\frac{\partial L}{\partial B} = (e_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$
 
 **Parameter $A$ Gradient**
-$$\frac{\partial L}{\partial A} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
+$$\frac{\partial L}{\partial A} = (e_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
+
+*(Note: $e_{t}$ represents the error signal at time $t$)*
 
 > **Why use `conj`?**
 > To move the error back to the parameter in complex space, we use the conjugate to align the phase for steepest descent.
