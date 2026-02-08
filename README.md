@@ -124,26 +124,21 @@ $$\bar{A} = \left(I + \frac{\Delta}{2}A\right)\left(I - \frac{\Delta}{2}A\right)
 
 ---
 
-#### 💡 Derivation of $\frac{\partial \bar{A}}{\partial A}$ (Step-by-Step)
+#### 💡 Derivation of $\frac{\partial \bar{A}}{\partial A}$ (Using Substitution $k = \frac{\Delta}{2}$)
 
-To simplify, let $k = \frac{\Delta}{2}$, $f = (I + kA)$, and $g = (I - kA)$. Then $\bar{A} = f \cdot g^{-1}$.
+To simplify the derivation, let $k = \frac{\Delta}{2}$. The equation becomes:
+$$\bar{A} = \frac{I + kA}{I - kA}$$
 
-1. **Differentiate $g^{-1}$ w.r.t $A$**:
-   Using the rule $\frac{\partial (g^{-1})}{\partial A} = -g^{-1} \cdot \frac{\partial g}{\partial A} \cdot g^{-1}$:
-   $$\frac{\partial (g^{-1})}{\partial A} = -g^{-1} \cdot (-k) \cdot g^{-1} = k \cdot g^{-1} \cdot g^{-1}$$
-   *(The two negatives cancel out, leaving a positive $k$ with the inverse squared.)*
+Using the quotient rule form $\frac{f'g - fg'}{g^2}$ (where $f = I+kA, g = I-kA$):
 
-2. **Apply Product Rule**:
-   $$\frac{\partial \bar{A}}{\partial A} = \frac{\partial f}{\partial A}g^{-1} + f\frac{\partial (g^{-1})}{\partial A}$$
-   $$\frac{\partial \bar{A}}{\partial A} = k \cdot g^{-1} + (I + kA) \cdot [k \cdot g^{-1} \cdot g^{-1}]$$
-
-3. **Factorize $k$ and $g^{-1}$**:
-   $$\frac{\partial \bar{A}}{\partial A} = k \left[ I + (I + kA)g^{-1} \right] g^{-1}$$
-
-4. **Identify $\bar{A}$**: Since $\bar{A} = (I + kA)g^{-1}$:
-   $$\frac{\partial \bar{A}}{\partial A} = k (I + \bar{A}) (I - kA)^{-1}$$
-
-5. **Final Substitution**: Replacing $k$ back with $\frac{\Delta}{2}$:
+1. **Differentiate Terms**: 
+   $f' = k$, $g' = -k$
+2. **Apply Formula**:
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{k(I - kA) - (I + kA)(-k)}{(I - kA)^2} = \frac{k - k^2A + k + k^2A}{(I - kA)^2} = \frac{2k}{(I - kA)^2}$$
+3. **Extract $(I + \bar{A})$**:
+   Since $1 + \bar{A} = 1 + \frac{1+kA}{1-kA} = \frac{1-kA+1+kA}{1-kA} = \frac{2}{1-kA}$, we can rewrite the gradient as:
+   $$\frac{\partial \bar{A}}{\partial A} = k \cdot \underbrace{\left( \frac{2}{I - kA} \right)}_{I + \bar{A}} \cdot \underbrace{\left( \frac{1}{I - kA} \right)}_{(I - kA)^{-1}}$$
+4. **Final Result**:
    $$\frac{\partial \bar{A}}{\partial A} = \frac{\Delta}{2} (I + \bar{A}) (I - \frac{\Delta}{2}A)^{-1}$$
 
 ---
@@ -156,6 +151,16 @@ $$\frac{\partial \mathcal{L}}{\partial A} = \underbrace{\left( \frac{\partial \m
 
 **Substituting the analytical derivatives:**
 $$\frac{\partial \mathcal{L}}{\partial A} = \left( g_{\bar{A}} \cdot \frac{\Delta}{2}(I + \bar{A})(I - \frac{\Delta}{2}A)^{-1} \right) + \left( g_{\bar{B}} \cdot \frac{\Delta}{2}\bar{B}(I - \frac{\Delta}{2}A)^{-1} \right)$$
+
+**2. Total Gradient for Parameter $B$**
+$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B} = g_{\bar{B}} \cdot \left(I - \frac{\Delta}{2}A\right)^{-1} \sqrt{\Delta}$$
+
+**Definition of Terms:**
+- $g_{\bar{A}}, g_{\bar{B}}$ : The gradients flowed back from the discrete-time S4 layer.
+- $\Delta$ : The step size (sampling time).
+- $\sqrt{\Delta}$ : Scaling factor to preserve variance.
+
+> **Note on Implementation:** In Zig, the inverse $(I - \frac{\Delta}{2}A)^{-1}$ is handled efficiently to maintain the DPLR structure of the state matrix.
 
 **
 
