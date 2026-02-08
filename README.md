@@ -63,38 +63,61 @@ The engine dynamically switches strategies at a 1024-step threshold.
 * **Independent Path (Log-space SIMD)**: Computes each timestep independently to eliminate error accumulation. Leverages hardware-level parallelism to offset the cost of `exp` and `log` operations.
 * **Hybrid Logic**: Automatically applies the **Recursive** path for speed in short sequences and the **SIMD Log** path for numerical integrity in long-range dependencies.
 
-## 🧠 Backpropagation Derivation in S4
+# 🧠 S4 Gradient Derivation Guide (for Internal Reference)
 
-The training of S4 involves understanding how gradients flow through different representations: the recursive SSM (BPTT) and the non-recursive Convolutional form.
+This guide derives the gradients for $A, B, C$ in three different perspectives: SSM (Recurrence), Convolution (Kernel), and Discretization (Bilinear).
 
-### 1. Full BPTT (Backpropagation Through Time)
-In a full SSM, the state $x_t$ depends on all previous states. Using the **Leibniz product rule** for the recurrence $x_t = \bar{A}x_{t-1} + \bar{B}u_t$:
+---
 
-The gradient of the loss $\mathcal{L}$ with respect to $\bar{A}$ is:
-$$\frac{\partial \mathcal{L}}{\partial \bar{A}} = \sum_{t=1}^{L} \frac{\partial \mathcal{L}}{\partial x_t} \cdot \frac{\partial x_t}{\partial \bar{A}}$$
+### 1. SSM Recurrence (BPTT Perspective)
+In the state equation $x_t = Ax_{t-1} + Bu_t$ and output $y_t = Cx_t$:
 
-By the product rule on the recurrence:
-$$\frac{\partial x_t}{\partial \bar{A}} = x_{t-1} + \bar{A} \frac{\partial x_{t-1}}{\partial \bar{A}}$$
-This shows how the gradient "accumulates" history through $\bar{A}$ over the entire sequence length $L$.
+* **Parameter $C$**: 
+    $$\frac{\partial \mathcal{L}}{\partial C} = \frac{\partial \mathcal{L}}{\partial y_t} \cdot \frac{\partial y_t}{\partial C} = \text{err}_t \cdot \text{conj}(x_t)$$
+    * **Why conj?**: In complex calculus, to move the error back to the parameter, we multiply by the conjugate of the signal to align the phase for the steepest descent.
 
-### 2. Truncated BPTT
-To save memory and prevent exploding/vanishing gradients, we limit the recursion to a window $k$:
-$$\frac{\partial \mathcal{L}}{\partial \bar{A}} \approx \sum_{t=i}^{i+k} \frac{\partial \mathcal{L}}{\partial x_t} \cdot \frac{\partial x_t}{\partial \bar{A}}$$
-where $\frac{\partial x_{t-k}}{\partial \bar{A}}$ is treated as **zero**. This effectively "cuts" the Leibniz chain, focusing only on local dependencies.
+* **Parameter $B$**:
+    $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial y_t} \cdot \frac{\partial y_t}{\partial x_t} \cdot \frac{\partial x_t}{\partial B} = (\text{err}_t \cdot \text{conj}(C)) \cdot \text{conj}(u_t)$$
+    * **Logic**: Error flows through $C$ to the state $x_t$, then meets the input $u_t$.
 
-### 3. Convolutional Backpropagation (The S4 Way)
-S4 converts the SSM into a convolution $y = K * u$. The kernel $K_t = C\bar{A}^t\bar{B}$ is a product of three terms. To find the gradient w.r.t. $\bar{A}$, we apply the **Leibniz rule** to the kernel elements:
+* **Parameter $A$**:
+    $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial y_t} \cdot \frac{\partial y_t}{\partial x_t} \cdot \frac{\partial x_t}{\partial A} = (\text{err}_t \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
+    * **Logic**: $A$ connects the previous state $x_{t-1}$ to the current state.
 
-For a single kernel element $K_t$:
-$$\frac{\partial K_t}{\partial \bar{A}} = C \left( \frac{\partial \bar{A}^t}{\partial \bar{A}} \right) \bar{B} = C \left( \sum_{i=0}^{t-1} \bar{A}^i \cdot I \cdot \bar{A}^{t-1-i} \right) \bar{B}$$
+---
 
-Then, by the chain rule for convolution:
-$$\frac{\partial \mathcal{L}}{\partial \bar{A}} = \sum_{t} \frac{\partial \mathcal{L}}{\partial y_t} \cdot \left( \frac{\partial K}{\partial \bar{A}} * u \right)_t$$
+### 2. Convolutional Perspective (Kernel Gradient)
+When using the kernel $K_t = C A^t B$:
 
-#### 💡 Key Insight
-- **BPTT** propagates through **time steps** (sequential).
-- **Convolutional Backprop** propagates through **kernel coefficients** (parallelizable).
-- S4's efficiency comes from computing the gradient of the entire kernel $K$ at once using FFT, rather than stepping through time.
+* **Kernel Gradient ($\partial \mathcal{L} / \partial K$)**: 
+    Calculated via the convolution of the output error with the input signal $u$. Let's call this `grad_K`.
+
+* **Backprop to $A$**:
+    $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial K_t} \cdot \frac{\partial K_t}{\partial A} = \text{grad\_K}_t \cdot (C \cdot t A^{t-1} \cdot B)$$
+    * **Point**: Applying the power rule to $A^t$ gives $t A^{t-1}$. This is why we use an `iota` vector ($t$) in our SIMD log-space code!
+
+---
+
+### 3. Continuous to Discrete (Bilinear Mapping)
+Since we train continuous parameters ($A, B$), we must backprop through the discretization:
+$$\bar{A} = (I + \frac{\Delta}{2}A)(I - \frac{\Delta}{2}A)^{-1}, \quad \bar{B} = (I - \frac{\Delta}{2}A)^{-1}\Delta B$$
+
+* **Chain Rule**:
+    $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} + \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A}$$
+    * **Note**: Because $A$ exists in both $\bar{A}$ and $\bar{B}$, the gradient flows through both paths.
+* **For $B$**:
+    $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B}$$
+    * **Note**: $B$ only affects $\bar{B}$, so it has a simpler single path.
+
+---
+
+### 4. Full BPTT (Temporal Gradient Flow)
+In Full BPTT, the gradient at time $t$ doesn't just stop; it travels to the past:
+$$\text{Total } \frac{\partial \mathcal{L}}{\partial x_{t-1}} = (\text{Direct error from } y_{t-1}) + (\text{Error flowing back from } x_t)$$
+
+Using the Leibniz-like chain:
+$$\frac{\partial \mathcal{L}}{\partial x_{t-1}} = (\text{err}_{t-1} \cdot C) + (\frac{\partial \mathcal{L}}{\partial x_t} \cdot A)$$
+* **Intuition**: The "future" error is multiplied by $A$ to see how much it affected the "past" state. This creates the long-range dependency chain that S4 handles so efficiently via convolutions.
 
 
 ## 📊 Results: Signal Denoising Success
