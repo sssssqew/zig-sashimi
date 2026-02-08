@@ -43,9 +43,9 @@ The engine dynamically switches strategies at a 1024-step threshold.
 | **SIMD Log** | $> 1024$ | **~35ms** | **`0e0`** | Long-range Training |
 
 
-![Kernel Benchmark Results (short sequence)](<img width="636" height="425" alt="Image" src="https://github.com/user-attachments/assets/e574ea8c-5dd5-463e-b7f4-f14df654b7a2" />)
+![Kernel Benchmark Results (short sequence)](https://private-user-images.githubusercontent.com/9676553/546732745-e574ea8c-5dd5-463e-b7f4-f14df654b7a2.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzA1NTE4NjUsIm5iZiI6MTc3MDU1MTU2NSwicGF0aCI6Ii85Njc2NTUzLzU0NjczMjc0NS1lNTc0ZWE4Yy01ZGQ1LTQ2M2UtYjdmNC1mMTRkZjY1NGI3YTIucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDIwOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAyMDhUMTE1MjQ1WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9NTE1YmY5Y2I4YmI5Mjk2MjE3YTNiM2U4NGE5NjIwNGIxMWY5NTE2ZDkwZmUxYWZlYTE2Njg1MTViOTJjNDdlMyZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.ah5ThTHrCuW-nVX1cuFqbEV2PPQh4YO-CQf9CULJE7w)
 
-![Kernel Benchmark Results (long sequence)](<img width="653" height="418" alt="Image" src="https://github.com/user-attachments/assets/78c309c2-a45a-48b1-ba78-d5527502d74a" />)
+![Kernel Benchmark Results (long sequence)](https://private-user-images.githubusercontent.com/9676553/546733952-78c309c2-a45a-48b1-ba78-d5527502d74a.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzA1NTE5NjYsIm5iZiI6MTc3MDU1MTY2NiwicGF0aCI6Ii85Njc2NTUzLzU0NjczMzk1Mi03OGMzMDljMi1hNDVhLTQ4YjEtYmE3OC1kNTUyNzUwMmQ3NGEucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDIwOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAyMDhUMTE1NDI2WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9OGQ2ODNmNGY2N2E1MGQ2MWZjODhmMGM3Y2I0MDM4MmJjOWUyMDhhODQ0MWFhYjY4N2U4NDU5NTkwY2FkNWIyZSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.sqARaOYdPv0Y8Wu8yKBJLWKDNBdMvT5JAHua91-gAK4)
 
 ## 📊 Results: Signal Denoising Success
 
