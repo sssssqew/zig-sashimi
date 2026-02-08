@@ -70,31 +70,31 @@ This guide derives the gradients for $A, B, C$ in three different perspectives: 
 ---
 
 ### 1. SSM Recurrence (BPTT Perspective)
-In the state equation $x_t = Ax_{t-1} + Bu_t$ and output $y_t = Cx_t$:
+In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$:
 
 * **Parameter $C$**: 
-    $$\frac{\partial \mathcal{L}}{\partial C} = \frac{\partial \mathcal{L}}{\partial y_t} \cdot \frac{\partial y_t}{\partial C} = \text{err}_t \cdot \text{conj}(x_t)$$
-    * **Why conj?**: In complex calculus, to move the error back to the parameter, we multiply by the conjugate of the signal to align the phase for the steepest descent.
+    $$\frac{\partial \mathcal{L}}{\partial C} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial C} = \text{err}_{t} \cdot \text{conj}(x_{t})$$
+    * **Why `conj`?**: In complex calculus, to move the error back to the parameter, we multiply by the conjugate of the signal to align the phase for the steepest descent.
 
 * **Parameter $B$**:
-    $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial y_t} \cdot \frac{\partial y_t}{\partial x_t} \cdot \frac{\partial x_t}{\partial B} = (\text{err}_t \cdot \text{conj}(C)) \cdot \text{conj}(u_t)$$
-    * **Logic**: Error flows through $C$ to the state $x_t$, then meets the input $u_t$.
+    $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial x_{t}} \cdot \frac{\partial x_{t}}{\partial B} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$
+    * **Logic**: Error flows through $C$ to the state $x_{t}$, then meets the input $u_{t}$.
 
 * **Parameter $A$**:
-    $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial y_t} \cdot \frac{\partial y_t}{\partial x_t} \cdot \frac{\partial x_t}{\partial A} = (\text{err}_t \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
-    * **Logic**: $A$ connects the previous state $x_{t-1}$ to the current state.
+    $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial x_{t}} \cdot \frac{\partial x_{t}}{\partial A} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
+    * **Logic**: $A$ connects the previous state $x_{t-1}$ to the current state $x_{t}$.
 
 ---
 
 ### 2. Convolutional Perspective (Kernel Gradient)
-When using the kernel $K_t = C A^t B$:
+When using the kernel $K_{t} = C A^{t} B$:
 
 * **Kernel Gradient ($\partial \mathcal{L} / \partial K$)**: 
     Calculated via the convolution of the output error with the input signal $u$. Let's call this `grad_K`.
 
 * **Backprop to $A$**:
-    $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial K_t} \cdot \frac{\partial K_t}{\partial A} = \text{grad\_K}_t \cdot (C \cdot t A^{t-1} \cdot B)$$
-    * **Point**: Applying the power rule to $A^t$ gives $t A^{t-1}$. This is why we use an `iota` vector ($t$) in our SIMD log-space code!
+    $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial K_{t}} \cdot \frac{\partial K_{t}}{\partial A} = \text{grad\_K}_{t} \cdot (C \cdot t A^{t-1} \cdot B)$$
+    * **Point**: Applying the power rule to $A^{t}$ gives $t A^{t-1}$. This is why we use an `iota` vector ($t$) in our SIMD log-space code!
 
 ---
 
@@ -102,10 +102,10 @@ When using the kernel $K_t = C A^t B$:
 Since we train continuous parameters ($A, B$), we must backprop through the discretization:
 $$\bar{A} = (I + \frac{\Delta}{2}A)(I - \frac{\Delta}{2}A)^{-1}, \quad \bar{B} = (I - \frac{\Delta}{2}A)^{-1}\Delta B$$
 
-* **Chain Rule**:
+* **Chain Rule for $A$**:
     $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} + \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A}$$
-    * **Note**: Because $A$ exists in both $\bar{A}$ and $\bar{B}$, the gradient flows through both paths.
-* **For $B$**:
+    * **Note**: Because $A$ exists in both $\bar{A}$ and $\bar{B}$, the gradient flows through both paths and must be summed.
+* **Chain Rule for $B$**:
     $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B}$$
     * **Note**: $B$ only affects $\bar{B}$, so it has a simpler single path.
 
@@ -113,11 +113,11 @@ $$\bar{A} = (I + \frac{\Delta}{2}A)(I - \frac{\Delta}{2}A)^{-1}, \quad \bar{B} =
 
 ### 4. Full BPTT (Temporal Gradient Flow)
 In Full BPTT, the gradient at time $t$ doesn't just stop; it travels to the past:
-$$\text{Total } \frac{\partial \mathcal{L}}{\partial x_{t-1}} = (\text{Direct error from } y_{t-1}) + (\text{Error flowing back from } x_t)$$
+$$\text{Total } \frac{\partial \mathcal{L}}{\partial x_{t-1}} = (\text{Direct error from } y_{t-1}) + (\text{Error flowing back from } x_{t})$$
 
 Using the Leibniz-like chain:
-$$\frac{\partial \mathcal{L}}{\partial x_{t-1}} = (\text{err}_{t-1} \cdot C) + (\frac{\partial \mathcal{L}}{\partial x_t} \cdot A)$$
-* **Intuition**: The "future" error is multiplied by $A$ to see how much it affected the "past" state. This creates the long-range dependency chain that S4 handles so efficiently via convolutions.
+$$\frac{\partial \mathcal{L}}{\partial x_{t-1}} = (\text{err}_{t-1} \cdot C) + (\frac{\partial \mathcal{L}}{\partial x_{t}} \cdot A)$$
+* **Intuition**: The "future" error is multiplied by $A$ to see how much it affected the "past" state. This creates the long-range dependency chain.
 
 
 ## 📊 Results: Signal Denoising Success
