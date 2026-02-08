@@ -47,6 +47,13 @@ The engine dynamically switches strategies at a 1024-step threshold.
 
 ![Kernel Benchmark Results (long sequence)](https://private-user-images.githubusercontent.com/9676553/546733952-78c309c2-a45a-48b1-ba78-d5527502d74a.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzA1NTE5NjYsIm5iZiI6MTc3MDU1MTY2NiwicGF0aCI6Ii85Njc2NTUzLzU0NjczMzk1Mi03OGMzMDljMi1hNDVhLTQ4YjEtYmE3OC1kNTUyNzUwMmQ3NGEucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDIwOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAyMDhUMTE1NDI2WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9OGQ2ODNmNGY2N2E1MGQ2MWZjODhmMGM3Y2I0MDM4MmJjOWUyMDhhODQ0MWFhYjY4N2U4NDU5NTkwY2FkNWIyZSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.sqARaOYdPv0Y8Wu8yKBJLWKDNBdMvT5JAHua91-gAK4)
 
+Method,Approach,Key Mechanism,Best For,Precision
+Base Loop,Naive Recursive,Direct CAˉtBˉ calculation for each step.,Baseline / Testing,High
+Sequential Loop,Recursive Rotation,Iterative update using phase rotation & magnitude scaling.,Short Seq (≤1024),Moderate (10−6)
+Normal Log Loop,Log-space Scalar,Independent calculation using exp(∑log) per step.,Long Seq Stability,Zero-Drift (0e0)
+SIMD Log Loop,Log-space Parallel,Vectorized log-space calculation using @Vector.,High-throughput Long Seq,Zero-Drift (0e0)
+Hybrid Dispatcher,Adaptive Selection,Dynamic switching between Sequential and SIMD Log.,All Use Cases,Optimal
+
 ## 📊 Results: Signal Denoising Success
 
 The model was tested on a sequence of noisy sinusoidal signals. By updating the latent states and constraining the spectral radius of the transition matrix, the model successfully recovered the original signal with high fidelity.
