@@ -117,13 +117,29 @@ $$\frac{\partial \mathcal{L}}{\partial A} = \sum_{t} \frac{\partial \mathcal{L}}
 ---
 
 ### 3. Continuous to Discrete (Bilinear Mapping)
-Continuous parameters ($A, B$) backprop through the Bilinear Transformation:
+
+The continuous parameters ($A, B$) are mapped to discrete parameters ($\bar{A}, \bar{B}$) using the **Bilinear Transformation (Tustin's method)**:
 $$\bar{A} = (I + \frac{\Delta}{2}A)(I - \frac{\Delta}{2}A)^{-1}, \quad \bar{B} = (I - \frac{\Delta}{2}A)^{-1}\Delta B$$
 
-* **Total Gradient for $A$**:
-    $$\frac{\partial \mathcal{L}}{\partial A} = \left( \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} \right) + \left( \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A} \right)$$
-* **Total Gradient for $B$**:
-    $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B}$$
+**Total Gradient for Parameter $A$**
+Since $A$ affects both $\bar{A}$ and $\bar{B}$, the gradient is the sum of two paths:
+$$\frac{\partial \mathcal{L}}{\partial A} = \left( \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} \right) + \left( \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A} \right)$$
+
+**Substituting the derivatives:**
+$$\frac{\partial \mathcal{L}}{\partial A} = \left( g_{\bar{A}} \cdot \frac{\Delta}{2}(I + \bar{A})(I - \frac{\Delta}{2}A)^{-1} \right) + \left( g_{\bar{B}} \cdot \frac{\Delta}{2}\bar{B}(I - \frac{\Delta}{2}A)^{-1} \right)$$
+
+**Total Gradient for Parameter $B$**
+Parameter $B$ only affects the discrete $\bar{B}$:
+$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B}$$
+
+**Substituting the derivative:**
+$$\frac{\partial \mathcal{L}}{\partial B} = g_{\bar{B}} \cdot (I - \frac{\Delta}{2}A)^{-1}\Delta$$
+
+**Definition of Terms:**
+- $g_{\bar{A}}, g_{\bar{B}}$ : The gradients flowed back from the discrete-time S4 layer.
+- $\Delta$ : The step size (sampling time) used for discretization.
+
+> **Note:** The inverse term $(I - \frac{\Delta}{2}A)^{-1}$ is crucial here. In our Zig implementation, we ensure numerical stability during this backpropagation by leveraging the structured properties of $A$.
 
 ---
 
