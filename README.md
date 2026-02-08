@@ -47,12 +47,140 @@ The engine dynamically switches strategies at a 1024-step threshold.
 
 ![Kernel Benchmark Results (long sequence)](https://private-user-images.githubusercontent.com/9676553/546733952-78c309c2-a45a-48b1-ba78-d5527502d74a.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzA1NTE5NjYsIm5iZiI6MTc3MDU1MTY2NiwicGF0aCI6Ii85Njc2NTUzLzU0NjczMzk1Mi03OGMzMDljMi1hNDVhLTQ4YjEtYmE3OC1kNTUyNzUwMmQ3NGEucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDIwOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAyMDhUMTE1NDI2WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9OGQ2ODNmNGY2N2E1MGQ2MWZjODhmMGM3Y2I0MDM4MmJjOWUyMDhhODQ0MWFhYjY4N2U4NDU5NTkwY2FkNWIyZSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.sqARaOYdPv0Y8Wu8yKBJLWKDNBdMvT5JAHua91-gAK4)
 
-Method,Approach,Key Mechanism,Best For,Precision
-Base Loop,Naive Recursive,Direct CAˉtBˉ calculation for each step.,Baseline / Testing,High
-Sequential Loop,Recursive Rotation,Iterative update using phase rotation & magnitude scaling.,Short Seq (≤1024),Moderate (10−6)
-Normal Log Loop,Log-space Scalar,Independent calculation using exp(∑log) per step.,Long Seq Stability,Zero-Drift (0e0)
-SIMD Log Loop,Log-space Parallel,Vectorized log-space calculation using @Vector.,High-throughput Long Seq,Zero-Drift (0e0)
-Hybrid Dispatcher,Adaptive Selection,Dynamic switching between Sequential and SIMD Log.,All Use Cases,Optimal
+### 🛠️ Comparison of Kernel Generation Methods
+
+| Method | Approach | Key Mechanism | Best For | Precision |
+| :--- | :--- | :--- | :--- | :--- |
+| **Base Loop** | Naive Recursive | Direct $C\bar{A}^t\bar{B}$ calculation for each step. | Baseline / Testing | High |
+| **Sequential Loop** | Recursive Rotation | Iterative update using phase rotation & magnitude scaling. | Short Seq ($\le 1024$) | Moderate ($10^{-6}$) |
+| **Normal Log Loop** | Log-space Scalar | Independent calculation using $\exp(\sum \log)$ per step. | Long Seq Stability | **Zero-Drift (0e0)** |
+| **SIMD Log Loop** | Log-space Parallel | Vectorized log-space calculation using `@Vector`. | High-throughput Long Seq | **Zero-Drift (0e0)** |
+| **Hybrid Dispatcher** | Adaptive Selection | Dynamic switching between **Sequential** and **SIMD Log**. | **All Use Cases** | **Optimal** |
+
+### 🔍 Implementation Details
+
+* **Recursive Path (Sequential)**: Uses 4 real multiplications and 2 additions per step. Optimized for low-latency by avoiding heavy transcendental functions (`exp`, `log`).
+* **Independent Path (Log-space SIMD)**: Computes each timestep independently to eliminate error accumulation. Leverages hardware-level parallelism to offset the cost of `exp` and `log` operations.
+* **Hybrid Logic**: Automatically applies the **Recursive** path for speed in short sequences and the **SIMD Log** path for numerical integrity in long-range dependencies.
+
+# 🧠 S4 Gradient Derivation Guide (for Internal Reference)
+
+This guide derives the gradients for $A, B, C$ in three different perspectives: SSM (Recurrence), Convolution (Kernel), and Discretization (Bilinear).
+
+---
+
+### 1. SSM Recurrence (BPTT Perspective)
+
+In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$:
+
+
+
+**Parameter $C$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial C} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial C} = e_{t} \cdot \text{conj}(x_{t})$$
+
+**Parameter $B$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial x_{t}} \cdot \frac{\partial x_{t}}{\partial B} = (e_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$
+
+**Parameter $A$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial x_{t}} \cdot \frac{\partial x_{t}}{\partial A} = (e_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
+
+**Definition of Terms:**
+- $e_{t} = \frac{\partial \mathcal{L}}{\partial y_{t}}$ : The error signal (gradient of loss w.r.t output) at time $t$.
+- $\text{conj}(\cdot)$ : Complex conjugate, used to align the gradient phase in complex space.
+
+> **Why use `conj`?**
+> To move the error back to the parameter in complex space, we use the conjugate to align the phase for steepest descent.
+
+---
+
+### 2. Convolutional Perspective (Kernel Gradient)
+
+When the output is represented as a convolution with the kernel $K_{t} = C A^{t} B$:
+
+
+
+**Parameter $C$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial C} = \sum_{t} \frac{\partial \mathcal{L}}{\partial K_{t}} \cdot \frac{\partial K_{t}}{\partial C} = \sum_{t} g_{t} \cdot \text{conj}(A^{t} B)$$
+
+**Parameter $B$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial B} = \sum_{t} \frac{\partial \mathcal{L}}{\partial K_{t}} \cdot \frac{\partial K_{t}}{\partial B} = \sum_{t} g_{t} \cdot \text{conj}(C A^{t})$$
+
+**Parameter $A$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial A} = \sum_{t} \frac{\partial \mathcal{L}}{\partial K_{t}} \cdot \frac{\partial K_{t}}{\partial A} = \sum_{t} g_{t} \cdot \text{conj}(C \cdot t A^{t-1} \cdot B)$$
+
+**Definition of Terms:**
+- $g_{t} = \frac{\partial \mathcal{L}}{\partial K_{t}}$ : The gradient of the loss w.r.t the kernel at time $t$.
+- $t A^{t-1}$ : Derived via the power rule, implemented using an **iota vector** in Zig for SIMD efficiency.
+
+> **Note:** In the convolutional view, the gradients are accumulated over the entire sequence length $L$, leveraging the parallel nature of the S4 layer.
+
+---
+### 3. Continuous to Discrete (Bilinear Mapping)
+
+The continuous parameters ($A, B$) are mapped to discrete parameters ($\bar{A}, \bar{B}$) using the **Bilinear Transformation (Tustin's method)**:
+$$\bar{A} = \left(1 + \frac{\Delta}{2}A\right)\left(1 - \frac{\Delta}{2}A\right)^{-1}, \quad \bar{B} = \left(1 - \frac{\Delta}{2}A\right)^{-1} \cdot \sqrt{\Delta} \cdot B$$
+
+---
+
+#### 💡 Derivation of $\frac{\partial \bar{A}}{\partial A}$ (Using Substitution $k = \frac{\Delta}{2}$)
+
+To simplify the derivation, let $k = \frac{\Delta}{2}$. The equation becomes:
+$$\bar{A} = \frac{1 + kA}{1 - kA}$$
+
+Using the quotient rule form $\frac{f'g - fg'}{g^2}$ (where $f = 1+kA, g = 1-kA$):
+
+1. **Differentiate Terms**: 
+   $f' = k$, $g' = -k$
+2. **Apply Formula**:
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{k(1 - kA) - (1 + kA)(-k)}{(1 - kA)^2} = \frac{k - k^2A + k + k^2A}{(1 - kA)^2} = \frac{2k}{(1 - kA)^2}$$
+3. **Extract $(1 + \bar{A})$**:
+   Since $1 + \bar{A} = 1 + \frac{1+kA}{1-kA} = \frac{(1-kA)+(1+kA)}{1-kA} = \frac{2}{1-kA}$, we can rewrite the gradient as:
+   $$\frac{\partial \bar{A}}{\partial A} = k \cdot \left( \frac{2}{1 - kA} \right) \cdot (1 - kA)^{-1}$$
+   
+   - Here, $\left( \frac{2}{1 - kA} \right)$ is equivalent to $(1 + \bar{A})$.
+   - $(1 - kA)^{-1}$ is the remaining term from the power rule.
+
+4. **Final Result**:
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{\Delta}{2} (1 + \bar{A}) (1 - \frac{\Delta}{2}A)^{-1}$$
+
+---
+
+#### 🚀 Backpropagation through Bilinear Mapping
+
+**1. Total Gradient for Parameter $A$**
+Since $A$ affects both $\bar{A}$ and $\bar{B}$, the gradient is the sum of two paths:
+$$\frac{\partial \mathcal{L}}{\partial A} = \left( \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} \right) + \left( \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A} \right)$$
+
+**Substituting the analytical derivatives:**
+$$\frac{\partial \mathcal{L}}{\partial A} = \left( g_{\bar{A}} \cdot \frac{\Delta}{2}(1 + \bar{A})(1 - \frac{\Delta}{2}A)^{-1} \right) + \left( g_{\bar{B}} \cdot \frac{\Delta}{2} \sqrt{\Delta} B (1 - \frac{\Delta}{2}A)^{-2} \right)$$
+
+**2. Total Gradient for Parameter $B$**
+$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B} = g_{\bar{B}} \cdot \left(1 - \frac{\Delta}{2}A\right)^{-1} \sqrt{\Delta}$$
+
+**Definition of Terms:**
+- $g_{\bar{A}}, g_{\bar{B}}$ : The gradients flowed back from the discrete-time S4 layer.
+- $\Delta$ : The step size (sampling time).
+- $\sqrt{\Delta}$ : Scaling factor to preserve variance.
+
+> **Note on Implementation:** In Zig, the inverse $(1 - \frac{\Delta}{2}A)^{-1}$ is handled efficiently to maintain the DPLR structure of the state matrix.
+
+**
+
+---
+
+### 4. Full BPTT (Temporal Gradient Flow)
+
+The gradient travels to the past through the recurrent chain:
+
+$$\frac{\partial L}{\partial x_{t-1}} = (e_{t-1} \cdot C) + \left( \frac{\partial L}{\partial x_{t}} \cdot A \right)$$
+
+
+
+**Intuition:**
+* The term $(e_{t-1} \cdot C)$ captures the immediate error from the current output.
+* The term $(\frac{\partial L}{\partial x_{t}} \cdot A)$ propagates the "future" error back to the previous state through the transition matrix $A$.
+* This recursive chain allows the model to learn long-range dependencies by flowing gradients across time steps.
+
 
 ## 📊 Results: Signal Denoising Success
 

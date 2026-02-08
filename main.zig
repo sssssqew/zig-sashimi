@@ -330,7 +330,7 @@ pub fn main() !void {
     const end_normal_optimized = timer.read();
     const duration_normal_optimized = end_normal_optimized - start_normal_optimized;
 
-    // 2. 결과 출력 (좌측 정렬 너비 30, 우측 정렬 너비 12로 통일)
+    // 2. 결과 출력 (좌측 정렬 너비 30, 우측 정렬 너비 12로 통일) /
     std.debug.print("\n=== Benchmark Results (Seq Len: {d}) ===\n", .{seq_len});
     std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Base Loop", duration_base });
     std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Normal Log Loop", duration_normal });
