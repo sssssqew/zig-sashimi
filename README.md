@@ -115,7 +115,6 @@ $$\frac{\partial \mathcal{L}}{\partial A} = \sum_{t} \frac{\partial \mathcal{L}}
 > **Note:** In the convolutional view, the gradients are accumulated over the entire sequence length $L$, leveraging the parallel nature of the S4 layer.
 
 ---
-
 ### 3. Continuous to Discrete (Bilinear Mapping)
 
 The continuous parameters ($A, B$) are mapped to discrete parameters ($\bar{A}, \bar{B}$) using the **Bilinear Transformation (Tustin's method)**:
@@ -123,26 +122,43 @@ $$\bar{A} = \left(I + \frac{\Delta}{2}A\right)\left(I - \frac{\Delta}{2}A\right)
 
 
 
-**Total Gradient for Parameter $A$**
-Since $A$ affects both $\bar{A}$ and $\bar{B}$, the gradient is the sum of two paths:
-$$\frac{\partial \mathcal{L}}{\partial A} = \left( \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} \right) + \left( \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A} \right)$$
+---
 
-**Substituting the derivatives:**
+#### 💡 Derivation of $\frac{\partial \bar{A}}{\partial A}$ (Using Substitution)
+To simplify the derivation, let $k = \frac{\Delta}{2}$. The equation becomes $\bar{A} = \frac{I + kA}{I - kA}$.
+Using the matrix version of the quotient rule (or product rule with inverse):
+
+1. **Set Terms**: Let $f = I + kA$ and $g = (I - kA)^{-1}$.
+2. **Differentiate**:
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{\partial f}{\partial A}g + f\frac{\partial g}{\partial A} = k(I - kA)^{-1} + (I + kA)\left[ (I - kA)^{-1} \cdot k \cdot (I - kA)^{-1} \right]$$
+3. **Factorize**:
+   $$\frac{\partial \bar{A}}{\partial A} = k \left[ I + (I + kA)(I - kA)^{-1} \right] (I - kA)^{-1}$$
+4. **Identify $\bar{A}$**: Since $\bar{A} = (I + kA)(I - kA)^{-1}$, we get:
+   $$\frac{\partial \bar{A}}{\partial A} = k (I + \bar{A}) (I - kA)^{-1}$$
+5. **Final Substitution**: Replacing $k$ back with $\frac{\Delta}{2}$:
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{\Delta}{2} (I + \bar{A}) (I - \frac{\Delta}{2}A)^{-1}$$
+
+---
+
+#### 🚀 Backpropagation through Bilinear Mapping
+
+**1. Total Gradient for Parameter $A$**
+Since $A$ affects both $\bar{A}$ and $\bar{B}$, the gradient is the sum of two paths:
+$$\frac{\partial \mathcal{L}}{\partial A} = \underbrace{\left( \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} \right)}_{\text{Path 1: via } \bar{A}} + \underbrace{\left( \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A} \right)}_{\text{Path 2: via } \bar{B}}$$
+
+**Substituting the analytical derivatives:**
 $$\frac{\partial \mathcal{L}}{\partial A} = \left( g_{\bar{A}} \cdot \frac{\Delta}{2}(I + \bar{A})(I - \frac{\Delta}{2}A)^{-1} \right) + \left( g_{\bar{B}} \cdot \frac{\Delta}{2}\bar{B}(I - \frac{\Delta}{2}A)^{-1} \right)$$
 
-**Total Gradient for Parameter $B$**
+**2. Total Gradient for Parameter $B$**
 Parameter $B$ only affects the discrete $\bar{B}$:
-$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B}$$
-
-**Substituting the derivative:**
-$$\frac{\partial \mathcal{L}}{\partial B} = g_{\bar{B}} \cdot \left(I - \frac{\Delta}{2}A\right)^{-1} \sqrt{\Delta}$$
+$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B} = g_{\bar{B}} \cdot \left(I - \frac{\Delta}{2}A\right)^{-1} \sqrt{\Delta}$$
 
 **Definition of Terms:**
 - $g_{\bar{A}}, g_{\bar{B}}$ : The gradients flowed back from the discrete-time S4 layer.
-- $\Delta$ : The step size (sampling time) used for discretization.
-- $\sqrt{\Delta}$ : Often used in S4/HiPPO scaling to preserve variance across different sampling rates.
+- $\Delta$ : The step size (sampling time).
+- $\sqrt{\Delta}$ : Scaling factor to preserve variance across different sampling rates.
 
-> **Note:** The inverse term $(I - \frac{\Delta}{2}A)^{-1}$ is crucial here. In our Zig implementation, we ensure numerical stability during this backpropagation by leveraging the structured properties of $A$.
+> **Note on Implementation:** The inverse term $(I - \frac{\Delta}{2}A)^{-1}$ is often computed efficiently using the Woodbury Identity or by exploiting the diagonal-plus-low-rank structure of $A$ in S4.
 
 ---
 
