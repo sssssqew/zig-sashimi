@@ -118,33 +118,30 @@ $$\frac{\partial \mathcal{L}}{\partial A} = \sum_{t} \frac{\partial \mathcal{L}}
 ### 3. Continuous to Discrete (Bilinear Mapping)
 
 The continuous parameters ($A, B$) are mapped to discrete parameters ($\bar{A}, \bar{B}$) using the **Bilinear Transformation (Tustin's method)**:
-$$\bar{A} = \left(I + \frac{\Delta}{2}A\right)\left(I - \frac{\Delta}{2}A\right)^{-1}, \quad \bar{B} = \left(I - \frac{\Delta}{2}A\right)^{-1} \cdot \sqrt{\Delta} \cdot B$$
-
-
+$$\bar{A} = \left(1 + \frac{\Delta}{2}A\right)\left(1 - \frac{\Delta}{2}A\right)^{-1}, \quad \bar{B} = \left(1 - \frac{\Delta}{2}A\right)^{-1} \cdot \sqrt{\Delta} \cdot B$$
 
 ---
 
 #### 💡 Derivation of $\frac{\partial \bar{A}}{\partial A}$ (Using Substitution $k = \frac{\Delta}{2}$)
 
 To simplify the derivation, let $k = \frac{\Delta}{2}$. The equation becomes:
-$$\bar{A} = \frac{I + kA}{I - kA}$$
+$$\bar{A} = \frac{1 + kA}{1 - kA}$$
 
-Using the quotient rule form $\frac{f'g - fg'}{g^2}$ (where $f = I+kA, g = I-kA$):
+Using the quotient rule form $\frac{f'g - fg'}{g^2}$ (where $f = 1+kA, g = 1-kA$):
 
 1. **Differentiate Terms**: 
    $f' = k$, $g' = -k$
 2. **Apply Formula**:
-   $$\frac{\partial \bar{A}}{\partial A} = \frac{k(I - kA) - (I + kA)(-k)}{(I - kA)^2} = \frac{k - k^2A + k + k^2A}{(I - kA)^2} = \frac{2k}{(I - kA)^2}$$
-3. **Extract $(I + \bar{A})$**:
-   Since $I + \bar{A} = I + \frac{I+kA}{I-kA} = \frac{(I-kA)+(I+kA)}{I-kA} = \frac{2I}{I-kA}$, we can rewrite the gradient as:
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{k(1 - kA) - (1 + kA)(-k)}{(1 - kA)^2} = \frac{k - k^2A + k + k^2A}{(1 - kA)^2} = \frac{2k}{(1 - kA)^2}$$
+3. **Extract $(1 + \bar{A})$**:
+   Since $1 + \bar{A} = 1 + \frac{1+kA}{1-kA} = \frac{(1-kA)+(1+kA)}{1-kA} = \frac{2}{1-kA}$, we can rewrite the gradient as:
+   $$\frac{\partial \bar{A}}{\partial A} = k \cdot \left( \frac{2}{1 - kA} \right) \cdot (1 - kA)^{-1}$$
+   
+   - Here, $\left( \frac{2}{1 - kA} \right)$ is equivalent to $(1 + \bar{A})$.
+   - $(1 - kA)^{-1}$ is the remaining term from the power rule.
 
-  $$\frac{\partial \bar{A}}{\partial A} = k \cdot \left( \frac{2I}{I - kA} \right) \cdot (I - kA)^{-1}$$
-
-  Where:
-  - $\left( \frac{2I}{I - kA} \right)$ is equivalent to $(I + \bar{A})$
-  - $(I - kA)^{-1}$ is the remaining term from the derivative
 4. **Final Result**:
-   $$\frac{\partial \bar{A}}{\partial A} = \frac{\Delta}{2} (I + \bar{A}) (I - \frac{\Delta}{2}A)^{-1}$$
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{\Delta}{2} (1 + \bar{A}) (1 - \frac{\Delta}{2}A)^{-1}$$
 
 ---
 
@@ -152,20 +149,20 @@ Using the quotient rule form $\frac{f'g - fg'}{g^2}$ (where $f = I+kA, g = I-kA$
 
 **1. Total Gradient for Parameter $A$**
 Since $A$ affects both $\bar{A}$ and $\bar{B}$, the gradient is the sum of two paths:
-$$\frac{\partial \mathcal{L}}{\partial A} = \underbrace{\left( \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} \right)}_{\text{Path 1: via } \bar{A}} + \underbrace{\left( \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A} \right)}_{\text{Path 2: via } \bar{B}}$$
+$$\frac{\partial \mathcal{L}}{\partial A} = \left( \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} \right) + \left( \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A} \right)$$
 
 **Substituting the analytical derivatives:**
-$$\frac{\partial \mathcal{L}}{\partial A} = \left( g_{\bar{A}} \cdot \frac{\Delta}{2}(I + \bar{A})(I - \frac{\Delta}{2}A)^{-1} \right) + \left( g_{\bar{B}} \cdot \frac{\Delta}{2}\bar{B}(I - \frac{\Delta}{2}A)^{-1} \right)$$
+$$\frac{\partial \mathcal{L}}{\partial A} = \left( g_{\bar{A}} \cdot \frac{\Delta}{2}(1 + \bar{A})(1 - \frac{\Delta}{2}A)^{-1} \right) + \left( g_{\bar{B}} \cdot \frac{\Delta}{2}\bar{B}(1 - \frac{\Delta}{2}A)^{-1} \right)$$
 
 **2. Total Gradient for Parameter $B$**
-$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B} = g_{\bar{B}} \cdot \left(I - \frac{\Delta}{2}A\right)^{-1} \sqrt{\Delta}$$
+$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B} = g_{\bar{B}} \cdot \left(1 - \frac{\Delta}{2}A\right)^{-1} \sqrt{\Delta}$$
 
 **Definition of Terms:**
 - $g_{\bar{A}}, g_{\bar{B}}$ : The gradients flowed back from the discrete-time S4 layer.
 - $\Delta$ : The step size (sampling time).
 - $\sqrt{\Delta}$ : Scaling factor to preserve variance.
 
-> **Note on Implementation:** In Zig, the inverse $(I - \frac{\Delta}{2}A)^{-1}$ is handled efficiently to maintain the DPLR structure of the state matrix.
+> **Note on Implementation:** In Zig, the inverse $(1 - \frac{\Delta}{2}A)^{-1}$ is handled efficiently to maintain the DPLR structure of the state matrix.
 
 **
 
