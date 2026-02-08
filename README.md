@@ -124,17 +124,25 @@ $$\bar{A} = \left(I + \frac{\Delta}{2}A\right)\left(I - \frac{\Delta}{2}A\right)
 
 ---
 
-#### 💡 Derivation of $\frac{\partial \bar{A}}{\partial A}$ (Using Substitution)
-To simplify the derivation, let $k = \frac{\Delta}{2}$. The equation becomes $\bar{A} = \frac{I + kA}{I - kA}$.
-Using the matrix version of the quotient rule (or product rule with inverse):
+#### 💡 Derivation of $\frac{\partial \bar{A}}{\partial A}$ (Step-by-Step)
 
-1. **Set Terms**: Let $f = I + kA$ and $g = (I - kA)^{-1}$.
-2. **Differentiate**:
-   $$\frac{\partial \bar{A}}{\partial A} = \frac{\partial f}{\partial A}g + f\frac{\partial g}{\partial A} = k(I - kA)^{-1} + (I + kA)\left[ (I - kA)^{-1} \cdot k \cdot (I - kA)^{-1} \right]$$
-3. **Factorize**:
-   $$\frac{\partial \bar{A}}{\partial A} = k \left[ I + (I + kA)(I - kA)^{-1} \right] (I - kA)^{-1}$$
-4. **Identify $\bar{A}$**: Since $\bar{A} = (I + kA)(I - kA)^{-1}$, we get:
+To simplify, let $k = \frac{\Delta}{2}$, $f = (I + kA)$, and $M = (I - kA)$. Then $\bar{A} = f \cdot M^{-1}$.
+
+1. **Differentiate $M^{-1}$ w.r.t $A$**:
+   Using the rule $\frac{\partial (M^{-1})}{\partial A} = -M^{-1} \cdot \frac{\partial M}{\partial A} \cdot M^{-1}$:
+   $$\frac{\partial (M^{-1})}{\partial A} = -M^{-1} \cdot (-k) \cdot M^{-1} = k \cdot M^{-1} \cdot M^{-1}$$
+   *(The two negatives cancel out, leaving a positive $k$ with the inverse squared.)*
+
+2. **Apply Product Rule**:
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{\partial f}{\partial A}M^{-1} + f\frac{\partial (M^{-1})}{\partial A}$$
+   $$\frac{\partial \bar{A}}{\partial A} = k \cdot M^{-1} + (I + kA) \cdot [k \cdot M^{-1} \cdot M^{-1}]$$
+
+3. **Factorize $k$ and $M^{-1}$**:
+   $$\frac{\partial \bar{A}}{\partial A} = k \left[ I + (I + kA)M^{-1} \right] M^{-1}$$
+
+4. **Identify $\bar{A}$**: Since $\bar{A} = (I + kA)M^{-1}$:
    $$\frac{\partial \bar{A}}{\partial A} = k (I + \bar{A}) (I - kA)^{-1}$$
+
 5. **Final Substitution**: Replacing $k$ back with $\frac{\Delta}{2}$:
    $$\frac{\partial \bar{A}}{\partial A} = \frac{\Delta}{2} (I + \bar{A}) (I - \frac{\Delta}{2}A)^{-1}$$
 
