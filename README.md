@@ -119,7 +119,9 @@ $$\frac{\partial \mathcal{L}}{\partial A} = \sum_{t} \frac{\partial \mathcal{L}}
 ### 3. Continuous to Discrete (Bilinear Mapping)
 
 The continuous parameters ($A, B$) are mapped to discrete parameters ($\bar{A}, \bar{B}$) using the **Bilinear Transformation (Tustin's method)**:
-$$\bar{A} = (I + \frac{\Delta}{2}A)(I - \frac{\Delta}{2}A)^{-1}, \quad \bar{B} = (I - \frac{\Delta}{2}A)^{-1}\Delta B$$
+$$\bar{A} = \left(I + \frac{\Delta}{2}A\right)\left(I - \frac{\Delta}{2}A\right)^{-1}, \quad \bar{B} = \left(I - \frac{\Delta}{2}A\right)^{-1} \cdot \sqrt{\Delta} \cdot B$$
+
+
 
 **Total Gradient for Parameter $A$**
 Since $A$ affects both $\bar{A}$ and $\bar{B}$, the gradient is the sum of two paths:
@@ -133,11 +135,12 @@ Parameter $B$ only affects the discrete $\bar{B}$:
 $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B}$$
 
 **Substituting the derivative:**
-$$\frac{\partial \mathcal{L}}{\partial B} = g_{\bar{B}} \cdot (I - \frac{\Delta}{2}A)^{-1}\Delta$$
+$$\frac{\partial \mathcal{L}}{\partial B} = g_{\bar{B}} \cdot \left(I - \frac{\Delta}{2}A\right)^{-1} \sqrt{\Delta}$$
 
 **Definition of Terms:**
 - $g_{\bar{A}}, g_{\bar{B}}$ : The gradients flowed back from the discrete-time S4 layer.
 - $\Delta$ : The step size (sampling time) used for discretization.
+- $\sqrt{\Delta}$ : Often used in S4/HiPPO scaling to preserve variance across different sampling rates.
 
 > **Note:** The inverse term $(I - \frac{\Delta}{2}A)^{-1}$ is crucial here. In our Zig implementation, we ensure numerical stability during this backpropagation by leveraging the structured properties of $A$.
 
