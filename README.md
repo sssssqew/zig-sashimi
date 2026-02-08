@@ -87,15 +87,15 @@ In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$
 ### 2. Convolutional Perspective (Kernel Gradient)
 When using the kernel $K_{t} = C A^{t} B$:
 
-* **Kernel Gradient**: Calculated via the convolution of the output error with the input signal $u$. Let's call this `grad_K`.
+* **Kernel Gradient**: Calculated via the convolution of the output error with the input signal $u$. Let's call this `grad-K`.
 * **Backprop to $A$**:
-    $$\frac{\partial \mathcal{L}}{\partial A} = \text{grad\_K}_{t} \cdot (C \cdot t A^{t-1} \cdot B)$$
-    * **Point**: Applying the power rule to $A^{t}$ gives $t A^{t-1}$. This matches our **iota vector** ($t$) implementation in Zig.
+    $$\frac{\partial \mathcal{L}}{\partial A} = \text{grad-K}_{t} \cdot (C \cdot t A^{t-1} \cdot B)$$
+    * **Note**: In the implementation, we use an `iota` vector ($t$) to handle the power rule $t A^{t-1}$ efficiently.
 
 ---
 
 ### 3. Continuous to Discrete (Bilinear Mapping)
-Continuous parameters ($A, B$) backprop through:
+Continuous parameters ($A, B$) backprop through the Bilinear Transformation:
 $$\bar{A} = (I + \frac{\Delta}{2}A)(I - \frac{\Delta}{2}A)^{-1}, \quad \bar{B} = (I - \frac{\Delta}{2}A)^{-1}\Delta B$$
 
 * **Total Gradient for $A$**:
