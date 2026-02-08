@@ -74,13 +74,14 @@ In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$
 
 * **Parameter $C$**: 
     $$\frac{\partial \mathcal{L}}{\partial C} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial C} = \text{err}_{t} \cdot \text{conj}(x_{t})$$
-    * **Why `conj`?**: To move the error back to the parameter in complex space, we use the conjugate to align the phase for steepest descent.
+    * **Why `conj`?**: In complex calculus, we use the conjugate to align the phase for the steepest descent.
 
 * **Parameter $B$**:
     $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial x_{t}} \cdot \frac{\partial x_{t}}{\partial B} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$
 
 * **Parameter $A$**:
     $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial x_{t}} \cdot \frac{\partial x_{t}}{\partial A} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
+    * **Logic**: $A$ connects the previous state $x_{t-1}$ to the current state $x_{t}$.
 
 ---
 
@@ -88,27 +89,30 @@ In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$
 When using the kernel $K_{t} = C A^{t} B$:
 
 * **Kernel Gradient ($\partial \mathcal{L} / \partial K$)**: 
-    Calculated via the convolution of the output error with the input signal $u$. Let's call this `grad_K`.
+    Calculated via the convolution of the output error with the input signal $u$. Let's call this `grad\_K`.
 
 * **Backprop to $A$**:
     $$\frac{\partial \mathcal{L}}{\partial A} = \text{grad\_K}_{t} \cdot (C \cdot t A^{t-1} \cdot B)$$
-    * **Point**: Applying the power rule to $A^{t}$ gives $t A^{t-1}$. This matches our **iota vector** implementation in Zig.
+    * **Point**: Applying the power rule to $A^{t}$ gives $t A^{t-1}$. This matches our **iota vector** ($t$) implementation in Zig.
 
 ---
 
 ### 3. Continuous to Discrete (Bilinear Mapping)
-Continuous parameters ($A, B$) backprop through:
-$$\bar{A} = (I + \frac{\Delta}{2}A)(I - \frac{\Delta}{2}A)^{-1}, \quad \bar{B} = (I - \frac{\Delta}{2}A)^{-1}\Delta B$$
+Since we train continuous parameters ($A, B$), we backprop through the discretization:
 
-* **Total Gradient for $A$**:
+* **Chain Rule for $A$**:
     $$\frac{\partial \mathcal{L}}{\partial A} = \left( \frac{\partial \mathcal{L}}{\partial \bar{A}} \cdot \frac{\partial \bar{A}}{\partial A} \right) + \left( \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial A} \right)$$
-* **Total Gradient for $B$**:
+    * **Note**: Because $A$ exists in both $\bar{A}$ and $\bar{B}$, both paths must be summed.
+
+* **Chain Rule for $B$**:
     $$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B}$$
 
 ---
 
 ### 4. Full BPTT (Temporal Gradient Flow)
-The gradient travels to the past through
+The gradient travels to the past through the recurrent chain:
+$$\frac{\partial \mathcal{L}}{\partial x_{t-1}} = (\text{err}_{t-1} \cdot C) + (\frac{\partial \mathcal{L}}{\partial x_{t}} \cdot A)$$
+* **Intuition**: The "future" error is back-propagated by multiplying with the transition matrix $A$.
 
 
 ## 📊 Results: Signal Denoising Success
