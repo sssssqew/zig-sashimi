@@ -43,9 +43,9 @@ The engine dynamically switches strategies at a 1024-step threshold.
 | **SIMD Log** | $> 1024$ | **~35ms** | **`0e0`** | Long-range Training |
 
 
-![Kernel Benchmark Results (short sequence)](https://private-user-images.githubusercontent.com/9676553/546732745-e574ea8c-5dd5-463e-b7f4-f14df654b7a2.png)
+![Kernel Benchmark Results (short sequence)](https://github.com/user-attachments/assets/e574ea8c-5dd5-463e-b7f4-f14df654b7a2)
 
-![Kernel Benchmark Results (long sequence)](https://private-user-images.githubusercontent.com/9676553/546733952-78c309c2-a45a-48b1-ba78-d5527502d74a.png)
+![Kernel Benchmark Results (long sequence)](https://github.com/user-attachments/assets/78c309c2-a45a-48b1-ba78-d5527502d74a)
 
 ### 🛠️ Comparison of Kernel Generation Methods
 
@@ -227,7 +227,7 @@ zig run sashimiCore.zig
 ### S4 Engine Performance
 Below is the terminal output demonstrating the real-time signal processing and denoising results.
 
-![S4 Execution Log](https://private-user-images.githubusercontent.com/9676553/531302617-3feb652d-3e86-4825-b7ed-04ba9833179a.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NjcyMzYyMDIsIm5iZiI6MTc2NzIzNTkwMiwicGF0aCI6Ii85Njc2NTUzLzUzMTMwMjYxNy0zZmViNjUyZC0zZTg2LTQ4MjUtYjdlZC0wNGJhOTgzMzE3OWEucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDEwMSUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAxMDFUMDI1MTQyWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9NWFmNjUwNGQ2NDFjYjgzNWI1ODAzZDBjMjQ5MGNmMmExMjk0OWIyMmNiZDQ3MWFkZjVjZmNmMTZjMDY5ZmQyNyZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.hRSyQNYmjwQKsniROwuKDQD_v9IBV2Swf9t82sIizYM)
+![S4 Execution Log](https://github.com/user-attachments/assets/3feb652d-3e86-4825-b7ed-04ba9833179a)
 
 ### 📋 Full Terminal Output
 
@@ -295,7 +295,7 @@ To verify the core mathematical logic and training loops within the Zig ecosyste
 ### 📸 Training Visualization & Execution
 Below is the terminal execution showing the model's convergence through Gradient Descent.
 
-![Linear Regression Execution](https://private-user-images.githubusercontent.com/9676553/531302070-541993d6-8902-4c34-9a2d-7822b87574ae.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NjcyMzYzODQsIm5iZiI6MTc2NzIzNjA4NCwicGF0aCI6Ii85Njc2NTUzLzUzMTMwMjA3MC01NDE5OTNkNi04OTAyLTRjMzQtOWEyZC03ODIyYjg3NTc0YWUucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDEwMSUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAxMDFUMDI1NDQ0WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9YzVjNjk4YjUzNWUyNTM0ODc3NDdjMDg2ZmY4NjFhOTAwZjgzNzE5MjZkZjg0MGU2OGFmMTEwMDQ1YmQxNWEwYyZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.nH3UUF-f0JBS7qgmPXrF7g1cdUDoMFjROX1gEYBuvzk)
+![Linear Regression Execution](https://github.com/user-attachments/assets/541993d6-8902-4c34-9a2d-7822b87574ae)
 
 ### 📋 Training Log Details
 
