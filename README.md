@@ -94,12 +94,25 @@ $$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial
 ---
 
 ### 2. Convolutional Perspective (Kernel Gradient)
-When using the kernel $K_{t} = C A^{t} B$:
 
-* **Kernel Gradient**: Calculated via the convolution of the output error with the input signal $u$. Let's call this `grad-K`.
-* **Backprop to $A$**:
-    $$\frac{\partial \mathcal{L}}{\partial A} = \text{grad-K}_{t} \cdot (C \cdot t A^{t-1} \cdot B)$$
-    * **Note**: In the implementation, we use an `iota` vector ($t$) to handle the power rule $t A^{t-1}$ efficiently.
+When the output is represented as a convolution with the kernel $K_{t} = C A^{t} B$:
+
+
+
+**Parameter $C$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial C} = \sum_{t} \frac{\partial \mathcal{L}}{\partial K_{t}} \cdot \frac{\partial K_{t}}{\partial C} = \sum_{t} g_{t} \cdot \text{conj}(A^{t} B)$$
+
+**Parameter $B$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial B} = \sum_{t} \frac{\partial \mathcal{L}}{\partial K_{t}} \cdot \frac{\partial K_{t}}{\partial B} = \sum_{t} g_{t} \cdot \text{conj}(C A^{t})$$
+
+**Parameter $A$ Gradient**
+$$\frac{\partial \mathcal{L}}{\partial A} = \sum_{t} \frac{\partial \mathcal{L}}{\partial K_{t}} \cdot \frac{\partial K_{t}}{\partial A} = \sum_{t} g_{t} \cdot \text{conj}(C \cdot t A^{t-1} \cdot B)$$
+
+**Definition of Terms:**
+- $g_{t} = \frac{\partial \mathcal{L}}{\partial K_{t}}$ : The gradient of the loss w.r.t the kernel at time $t$.
+- $t A^{t-1}$ : Derived via the power rule, implemented using an **iota vector** in Zig for SIMD efficiency.
+
+> **Note:** In the convolutional view, the gradients are accumulated over the entire sequence length $L$, leveraging the parallel nature of the S4 layer.
 
 ---
 
