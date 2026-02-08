@@ -252,7 +252,7 @@ pub const Complex = struct {
     }
 
     /// SSM Kernel Generation: Expands state-space parameters into a convolutional filter
-    pub fn generateKernel(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) !void {
+    pub fn generateKernelNormal(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) !void {
         std.debug.assert(result.len != 0);
         std.debug.assert(a_bar.mag() < 1.0);
         if (result.len == 0) return;
@@ -284,6 +284,20 @@ pub const Complex = struct {
         return .{ .re = std.math.log(f32, std.math.e, self.mag()), .im = self.phase() };
     }
 
+    pub fn generateKernel(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) !void {
+        const seq_len = result.len;
+
+        // 1024를 기준으로 전략 선택
+        if (seq_len <= 1024) {
+            // 짧은 시퀀스: 오차가 적고 오버헤드에 민감하므로 순차 곱셈!
+            return try generateKernelSequential(a_bar, b_bar, c, result);
+        } else {
+            // 긴 시퀀스: 누적 오차 방지 및 하드웨어 가속을 위해 SIMD 로그 방식!
+            // (만약 SIMD 최적화가 안 되어 있다면 NormalLog라도 써야 함)
+            return try generateKernelWithLogAndSIMD(a_bar, b_bar, c, result);
+        }
+    }
+
     pub fn generateKernelWithLog(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) !void {
         std.debug.assert(result.len != 0);
         std.debug.assert(a_bar.mag() < 1.0);
@@ -306,11 +320,114 @@ pub const Complex = struct {
 
             if (M < threshold) { // A값이 0에 근접할때 조기종료
                 @memset(result[i..], Complex.init(0, 0));
-                std.debug.print("--- Early Exit at t = {d} --- (M = {e})\n", .{ i, M });
+                // std.debug.print("--- Early Exit at t = {d} --- (M = {e})\n", .{ i, M });
                 break;
             }
 
             r.* = Complex.init(M * std.math.cos(I), M * std.math.sin(I));
+        }
+    }
+
+    pub fn generateKernelWithLogAndSIMD(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) !void {
+        std.debug.assert(result.len != 0);
+        std.debug.assert(a_bar.mag() < 1.0);
+        if (result.len == 0) return;
+        if (a_bar.mag() >= 1.0) return error.UnstableSystem;
+
+        const logA = a_bar.ln();
+        const logB = b_bar.ln();
+        const logC = c.ln();
+
+        const fixedRe = logC.re + logB.re;
+        const fixedIm = logC.im + logB.im;
+
+        const vectorSize = std.simd.suggestVectorLength(f32) orelse 4;
+        const logAreV: @Vector(vectorSize, f32) = @splat(logA.re); // broadcasting
+        const logAimV: @Vector(vectorSize, f32) = @splat(logA.im);
+        const fixedReV: @Vector(vectorSize, f32) = @splat(fixedRe);
+        const fixedImV: @Vector(vectorSize, f32) = @splat(fixedIm);
+        var IfV: @Vector(vectorSize, f32) = std.simd.iota(f32, vectorSize);
+        const stepV: @Vector(vectorSize, f32) = @splat(@as(f32, @floatFromInt(vectorSize)));
+
+        var RV: @Vector(vectorSize, f32) = undefined;
+        var IV: @Vector(vectorSize, f32) = undefined;
+        var MV: @Vector(vectorSize, f32) = undefined;
+
+        var i: usize = 0;
+        const len: usize = result.len;
+        const threshold = 1e-9;
+
+        while (i + vectorSize <= len) : (i += vectorSize) {
+            RV = fixedReV + IfV * logAreV;
+            IV = fixedImV + IfV * logAimV;
+
+            inline for (0..vectorSize) |j| {
+                MV[j] = std.math.exp(RV[j]);
+                result[i + j] = Complex.init(MV[j] * std.math.cos(IV[j]), MV[j] * std.math.sin(IV[j]));
+            }
+            if (@reduce(.Max, MV) < threshold) {
+                @memset(result[i + vectorSize ..], Complex.init(0, 0));
+                // std.debug.print("--- Early Exit at t = {d} --- (M = {e})\n", .{ i, @reduce(.Max, MV) });
+                return;
+            }
+
+            IfV = IfV + stepV;
+        }
+        while (i < len) : (i += 1) {
+            const i_f = @as(f32, @floatFromInt(i));
+            const R = fixedRe + i_f * logA.re;
+            const I = fixedIm + i_f * logA.im;
+            const M = std.math.exp(R);
+
+            if (M < threshold) { // A값이 0에 근접할때 조기종료
+                @memset(result[i..], Complex.init(0, 0));
+                // std.debug.print("--- Early Exit at t = {d} --- (M = {e})\n", .{ i, M });
+                return;
+            }
+            result[i] = Complex.init(M * std.math.cos(I), M * std.math.sin(I));
+        }
+    }
+
+    pub fn generateKernelSequential(a_bar: Complex, b_bar: Complex, c: Complex, result: []Complex) !void {
+        std.debug.assert(result.len != 0);
+        if (a_bar.mag() >= 1.0) return error.UnstableSystem;
+
+        const logA = a_bar.ln();
+        const logB = b_bar.ln();
+        const logC = c.ln();
+
+        const fixedRe = logC.re + logB.re;
+        const fixedIm = logC.im + logB.im;
+
+        // --- 루프 밖에서 단 한 번만 수행하는 무거운 연산 ---
+        // 1. 초기값 (t=0)
+        const M_start = std.math.exp(fixedRe);
+        const W_start = Complex.init(std.math.cos(fixedIm), std.math.sin(fixedIm));
+
+        // 2. 매 스텝 곱해줄 변화량 (Step)
+        const M_step = std.math.exp(logA.re);
+        const W_step = Complex.init(std.math.cos(logA.im), std.math.sin(logA.im));
+
+        var current_M = M_start;
+        var current_W = W_start;
+
+        const threshold = 1e-9;
+
+        for (result, 0..) |*r, i| {
+            // 루프 안에는 exp, cos, sin이 하나도 없습니다!
+            // 오직 실수 곱셈과 복소수 곱셈뿐입니다.
+            r.* = Complex.init(current_M * current_W.re, current_M * current_W.im);
+
+            // 다음 단계 업데이트
+            current_M *= M_step; // 크기 업데이트 (지수 법칙)
+            current_W = current_W.mul(W_step); // 각도 업데이트 (회전)
+
+            // 조기 종료 체크
+            if (current_M < threshold) {
+                @memset(result[i + 1 ..], Complex.init(0, 0));
+                // std.debug.print("--- Early Exit (Sequential) at t = {d} ---\n", .{i});
+                break;
+            }
         }
     }
 

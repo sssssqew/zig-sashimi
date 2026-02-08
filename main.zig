@@ -223,55 +223,188 @@ pub fn main() !void {
 
     //////////////////////////////////////////////
     //////////////////////////////////////////////
-    const allocator = std.heap.page_allocator;
-    const seq_len = 300000; // 테스트용 길이는 짧게 시작
+    // const allocator = std.heap.page_allocator;
+    // const seq_len = 300000; // 테스트용 길이는 짧게 시작
 
-    // 1. 테스트용 파라미터 설정 (3 + 2i 같은 값들)
-    const a_bar = Complex.init(0.999, 0.0001); // 안정적인 시스템을 위해 크기가 1보다 작게
-    const b_bar = Complex.init(1.0, 0.5);
-    const c = Complex.init(0.5, -0.2);
+    // // 1. 테스트용 파라미터 설정 (3 + 2i 같은 값들)
+    // const a_bar = Complex.init(0.999, 0.0001); // 안정적인 시스템을 위해 크기가 1보다 작게
+    // const b_bar = Complex.init(1.0, 0.5);
+    // const c = Complex.init(0.5, -0.2);
 
-    // 2. 결과 저장용 메모리 할당
-    const res_linear = try allocator.alloc(Complex, seq_len);
-    const res_log = try allocator.alloc(Complex, seq_len);
-    defer allocator.free(res_linear);
-    defer allocator.free(res_log);
+    // // 2. 결과 저장용 메모리 할당
+    // const res_linear = try allocator.alloc(Complex, seq_len);
+    // const res_log = try allocator.alloc(Complex, seq_len);
+    // defer allocator.free(res_linear);
+    // defer allocator.free(res_log);
+
+    // var timer = try std.time.Timer.start();
+
+    // // 3. 두 방식 실행
+    // timer.reset();
+    // try Complex.generateKernel(a_bar, b_bar, c, res_linear); // 기존 방식
+    // const linear_time = timer.read(); // 나노초(ns) 단위
+    // timer.reset();
+    // try Complex.generateKernelWithLog(a_bar, b_bar, c, res_log); // 로그 방식
+    // const log_time = timer.read();
+
+    // // 4. 결과 비교 출력
+    // std.debug.print("{s:>5} | {s:>14} | {s:>14} | {s:>10}\n", .{ "t", "Linear", "Log", "Error" });
+    // std.debug.print("--------------------------------------------------------------------------------\n", .{});
+
+    // var total_loss: f32 = 0;
+    // for (0..seq_len) |i| {
+    //     const l = res_linear[i];
+    //     const log_v = res_log[i];
+
+    //     // 오차 계산 (실수부와 허수부 차이의 합)
+    //     const err_re = @abs(l.re - log_v.re);
+    //     const err_im = @abs(l.im - log_v.im);
+    //     total_loss += err_re * err_re + err_im * err_im;
+
+    //     std.debug.print("{d:>5} | {d:.15}+{d:.15}i | {d:.15}+{d:.15}i | {d:.15}\n", .{
+    //         i, l.re, l.im, log_v.re, log_v.im, err_re + err_im,
+    //     });
+    // }
+    // std.debug.print("total loss: {d:.10}\n", .{total_loss});
+
+    // // 결과 출력
+    // std.debug.print("\n[성능 비교 결과]\n", .{});
+    // std.debug.print("리니어 방식: {d:>10} ns ({d:.3} ms)\n", .{ linear_time, @as(f32, @floatFromInt(linear_time)) / 1_000_000.0 });
+    // std.debug.print("로그 방식  : {d:>10} ns ({d:.3} ms)\n", .{ log_time, @as(f32, @floatFromInt(log_time)) / 1_000_000.0 });
+
+    // const ratio = @as(f32, @floatFromInt(log_time)) / @as(f32, @floatFromInt(linear_time));
+    // std.debug.print("상대적 속도: 로그 방식이 리니어보다 {d:.2}배 더 걸림\n", .{ratio});
+
+    // 커널생성 SIMD 여부에 따른 성능 테스트
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
+
+    // 1. 테스트 데이터 준비 (시퀀스 길이를 좀 길게 잡아야 차이가 확 보입니다)
+    const seq_len = 1000000;
+    const result_base = try allocator.alloc(Complex, seq_len);
+    const result_normal = try allocator.alloc(Complex, seq_len);
+    const result_simd = try allocator.alloc(Complex, seq_len);
+    const result_seq = try allocator.alloc(Complex, seq_len);
+    const result_optimized = try allocator.alloc(Complex, seq_len);
+    defer allocator.free(result_base);
+    defer allocator.free(result_normal);
+    defer allocator.free(result_simd);
+    defer allocator.free(result_seq);
+    defer allocator.free(result_optimized);
+
+    // 테스트용 파라미터 (S4 논문에 나올 법한 값들)
+    const a_bar = Complex.init(0.99999, 0.0001);
+    const b_bar = Complex.init(0.5, -0.2);
+    const c = Complex.init(0.3, 0.4);
 
     var timer = try std.time.Timer.start();
 
-    // 3. 두 방식 실행
-    timer.reset();
-    try Complex.generateKernel(a_bar, b_bar, c, res_linear); // 기존 방식
-    const linear_time = timer.read(); // 나노초(ns) 단위
-    timer.reset();
-    try Complex.generateKernelWithLog(a_bar, b_bar, c, res_log); // 로그 방식
-    const log_time = timer.read();
+    // --- Base Loop 측정 ---
+    const start_base = timer.read();
+    try Complex.generateKernelNormal(a_bar, b_bar, c, result_base);
+    const end_base = timer.read();
+    const duration_base = end_base - start_base;
 
-    // 4. 결과 비교 출력
-    std.debug.print("{s:>5} | {s:>14} | {s:>14} | {s:>10}\n", .{ "t", "Linear", "Log", "Error" });
-    std.debug.print("--------------------------------------------------------------------------------\n", .{});
+    // --- Normal Log Loop 측정 ---
+    const start_normal = timer.read();
+    try Complex.generateKernelWithLog(a_bar, b_bar, c, result_normal);
+    const end_normal = timer.read();
+    const duration_normal = end_normal - start_normal;
 
-    var total_loss: f32 = 0;
-    for (0..seq_len) |i| {
-        const l = res_linear[i];
-        const log_v = res_log[i];
+    // --- SIMD Log Loop 측정 ---
+    const start_simd = timer.read();
+    try Complex.generateKernelWithLogAndSIMD(a_bar, b_bar, c, result_simd);
+    const end_simd = timer.read();
+    const duration_simd = end_simd - start_simd;
 
-        // 오차 계산 (실수부와 허수부 차이의 합)
-        const err_re = @abs(l.re - log_v.re);
-        const err_im = @abs(l.im - log_v.im);
-        total_loss += err_re * err_re + err_im * err_im;
+    // --- Normal Log Loop (Seqencial) 측정 ---
+    const start_normal_seq = timer.read();
+    try Complex.generateKernelSequential(a_bar, b_bar, c, result_seq);
+    const end_normal_seq = timer.read();
+    const duration_normal_seq = end_normal_seq - start_normal_seq;
 
-        std.debug.print("{d:>5} | {d:.15}+{d:.15}i | {d:.15}+{d:.15}i | {d:.15}\n", .{
-            i, l.re, l.im, log_v.re, log_v.im, err_re + err_im,
-        });
+    // --- Optimized SIMD 측정 ---
+    const start_normal_optimized = timer.read();
+    try Complex.generateKernel(a_bar, b_bar, c, result_optimized);
+    const end_normal_optimized = timer.read();
+    const duration_normal_optimized = end_normal_optimized - start_normal_optimized;
+
+    // 2. 결과 출력
+    std.debug.print("\n=== Benchmark Results (Seq Len: {d}) ===\n", .{seq_len});
+    std.debug.print("Base Log Loop: {d:>10} ns\n", .{duration_base});
+    std.debug.print("Normal Log Loop: {d:>10} ns\n", .{duration_normal});
+    std.debug.print("SIMD Log Loop  : {d:>10} ns\n", .{duration_simd});
+    std.debug.print("Normal Log Loop (sequencial)  : {d:>10} ns\n", .{duration_normal_seq});
+    std.debug.print("Optimzed SIMD  : {d:>10} ns\n", .{duration_normal_optimized});
+
+    const speedup_base = @as(f64, @floatFromInt(duration_base)) / @as(f64, @floatFromInt(duration_simd));
+    const speedup_normal = @as(f64, @floatFromInt(duration_normal)) / @as(f64, @floatFromInt(duration_simd));
+    const speedup_seq = @as(f64, @floatFromInt(duration_normal_seq)) / @as(f64, @floatFromInt(duration_simd));
+    const speedup_optimized = @as(f64, @floatFromInt(duration_normal_optimized)) / @as(f64, @floatFromInt(duration_simd));
+    std.debug.print("Speedup (base/SIMD)       : {d:.2}x\n", .{speedup_base});
+    std.debug.print("Speedup (nomral/SIMD)       : {d:.2}x\n", .{speedup_normal});
+    std.debug.print("Speedup (sequencial/SIMD)       : {d:.2}x\n", .{speedup_seq});
+    std.debug.print("Speedup (optimized/SIMD)       : {d:.2}x\n", .{speedup_optimized});
+
+    // 3. 검증 (두 결과가 수학적으로 같은지 확인)
+    var max_diff: f32 = 0;
+    for (result_base, 0..) |n, i| {
+        const diff_re = @abs(n.re - result_simd[i].re);
+        const diff_im = @abs(n.im - result_simd[i].im);
+        if (diff_re > max_diff) max_diff = diff_re;
+        if (diff_im > max_diff) max_diff = diff_im;
     }
-    std.debug.print("total loss: {d:.10}\n", .{total_loss});
 
-    // 결과 출력
-    std.debug.print("\n[성능 비교 결과]\n", .{});
-    std.debug.print("리니어 방식: {d:>10} ns ({d:.3} ms)\n", .{ linear_time, @as(f32, @floatFromInt(linear_time)) / 1_000_000.0 });
-    std.debug.print("로그 방식  : {d:>10} ns ({d:.3} ms)\n", .{ log_time, @as(f32, @floatFromInt(log_time)) / 1_000_000.0 });
+    std.debug.print("Max Difference : {e}\n", .{max_diff});
+    if (max_diff < 1e-5) {
+        std.debug.print("Validation (base/SIMD): PASSED ✅\n", .{});
+    } else {
+        std.debug.print("Validation (base/SIMD): FAILED ❌\n", .{});
+    }
 
-    const ratio = @as(f32, @floatFromInt(log_time)) / @as(f32, @floatFromInt(linear_time));
-    std.debug.print("상대적 속도: 로그 방식이 리니어보다 {d:.2}배 더 걸림\n", .{ratio});
+    max_diff = 0;
+    for (result_normal, 0..) |n, i| {
+        const diff_re = @abs(n.re - result_simd[i].re);
+        const diff_im = @abs(n.im - result_simd[i].im);
+        if (diff_re > max_diff) max_diff = diff_re;
+        if (diff_im > max_diff) max_diff = diff_im;
+    }
+
+    std.debug.print("Max Difference : {e}\n", .{max_diff});
+    if (max_diff < 1e-5) {
+        std.debug.print("Validation (normal/SIMD): PASSED ✅\n", .{});
+    } else {
+        std.debug.print("Validation (normal/SIMD): FAILED ❌\n", .{});
+    }
+
+    max_diff = 0;
+    for (result_seq, 0..) |n, i| {
+        const diff_re = @abs(n.re - result_simd[i].re);
+        const diff_im = @abs(n.im - result_simd[i].im);
+        if (diff_re > max_diff) max_diff = diff_re;
+        if (diff_im > max_diff) max_diff = diff_im;
+    }
+
+    std.debug.print("Max Difference : {e}\n", .{max_diff});
+    if (max_diff < 1e-5) {
+        std.debug.print("Validation (sequencial/simd): PASSED ✅\n", .{});
+    } else {
+        std.debug.print("Validation (sequencial/simd): FAILED ❌\n", .{});
+    }
+
+    max_diff = 0;
+    for (result_optimized, 0..) |n, i| {
+        const diff_re = @abs(n.re - result_simd[i].re);
+        const diff_im = @abs(n.im - result_simd[i].im);
+        if (diff_re > max_diff) max_diff = diff_re;
+        if (diff_im > max_diff) max_diff = diff_im;
+    }
+
+    std.debug.print("Max Difference : {e}\n", .{max_diff});
+    if (max_diff < 1e-5) {
+        std.debug.print("Validation  (optimized/simd): PASSED ✅\n", .{});
+    } else {
+        std.debug.print("Validation  (optimized/simd): FAILED ❌\n", .{});
+    }
 }
