@@ -137,7 +137,7 @@ Using the quotient rule form $\frac{f'g - fg'}{g^2}$ (where $f = I+kA, g = I-kA$
    $$\frac{\partial \bar{A}}{\partial A} = \frac{k(I - kA) - (I + kA)(-k)}{(I - kA)^2} = \frac{k - k^2A + k + k^2A}{(I - kA)^2} = \frac{2k}{(I - kA)^2}$$
 3. **Extract $(I + \bar{A})$**:
    Since $1 + \bar{A} = 1 + \frac{1+kA}{1-kA} = \frac{(I-kA)+(I+kA)}{I-kA} = \frac{2}{I-kA}$, we can rewrite the gradient as:
-   $$\frac{\partial \bar{A}}{\partial A} = k \cdot \underbrace{\left( \frac{2}{I - kA} \right)}_{I + \bar{A}} \cdot \underbrace{\left( I - kA \right)^{-1}}_{(I - kA)^{-1}}$$
+   $$\frac{\partial \bar{A}}{\partial A} = k \cdot \underbrace{\left( \frac{2I}{I - kA} \right)}_{I + \bar{A}} \cdot \underbrace{(I - kA)^{-1}}_{(I - kA)^{-1}}$$
 4. **Final Result**:
    $$\frac{\partial \bar{A}}{\partial A} = \frac{\Delta}{2} (I + \bar{A}) (I - \frac{\Delta}{2}A)^{-1}$$
 
