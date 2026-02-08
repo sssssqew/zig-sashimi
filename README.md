@@ -72,15 +72,7 @@ This guide derives the gradients for $A, B, C$ in three different perspectives: 
 ### 1. SSM Recurrence (BPTT Perspective)
 In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$:
 
-* **Parameter $C$**:
-  $$\frac{\partial L}{\partial C} = \text{err}_{t} \cdot \text{conj}(x_{t})$$
-  *(Where $\text{err}_{t}$ is the error at step $t$)*
-
-* **Parameter $B$**:
-  $$\frac{\partial L}{\partial B} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$
-
-* **Parameter $A$**:
-  $$\frac{\partial L}{\partial A} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
+Parameter $C$ Gradient:$$\frac{\partial L}{\partial C} = \text{err}_{t} \cdot \text{conj}(x_{t})$$Parameter $B$ Gradient:$$\frac{\partial L}{\partial B} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$Parameter $A$ Gradient:$$\frac{\partial L}{\partial A} = (\text{err}_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
 
 > **Why use `conj`?**: To move the error back to the parameter in complex space, we use the conjugate to align the phase for steepest descent.
 
