@@ -126,21 +126,21 @@ $$\bar{A} = \left(I + \frac{\Delta}{2}A\right)\left(I - \frac{\Delta}{2}A\right)
 
 #### 💡 Derivation of $\frac{\partial \bar{A}}{\partial A}$ (Step-by-Step)
 
-To simplify, let $k = \frac{\Delta}{2}$, $f = (I + kA)$, and $M = (I - kA)$. Then $\bar{A} = f \cdot M^{-1}$.
+To simplify, let $k = \frac{\Delta}{2}$, $f = (I + kA)$, and $g = (I - kA)$. Then $\bar{A} = f \cdot g^{-1}$.
 
-1. **Differentiate $M^{-1}$ w.r.t $A$**:
-   Using the rule $\frac{\partial (M^{-1})}{\partial A} = -M^{-1} \cdot \frac{\partial M}{\partial A} \cdot M^{-1}$:
-   $$\frac{\partial (M^{-1})}{\partial A} = -M^{-1} \cdot (-k) \cdot M^{-1} = k \cdot M^{-1} \cdot M^{-1}$$
+1. **Differentiate $g^{-1}$ w.r.t $A$**:
+   Using the rule $\frac{\partial (g^{-1})}{\partial A} = -g^{-1} \cdot \frac{\partial g}{\partial A} \cdot g^{-1}$:
+   $$\frac{\partial (g^{-1})}{\partial A} = -g^{-1} \cdot (-k) \cdot g^{-1} = k \cdot g^{-1} \cdot g^{-1}$$
    *(The two negatives cancel out, leaving a positive $k$ with the inverse squared.)*
 
 2. **Apply Product Rule**:
-   $$\frac{\partial \bar{A}}{\partial A} = \frac{\partial f}{\partial A}M^{-1} + f\frac{\partial (M^{-1})}{\partial A}$$
-   $$\frac{\partial \bar{A}}{\partial A} = k \cdot M^{-1} + (I + kA) \cdot [k \cdot M^{-1} \cdot M^{-1}]$$
+   $$\frac{\partial \bar{A}}{\partial A} = \frac{\partial f}{\partial A}g^{-1} + f\frac{\partial (g^{-1})}{\partial A}$$
+   $$\frac{\partial \bar{A}}{\partial A} = k \cdot g^{-1} + (I + kA) \cdot [k \cdot g^{-1} \cdot g^{-1}]$$
 
-3. **Factorize $k$ and $M^{-1}$**:
-   $$\frac{\partial \bar{A}}{\partial A} = k \left[ I + (I + kA)M^{-1} \right] M^{-1}$$
+3. **Factorize $k$ and $g^{-1}$**:
+   $$\frac{\partial \bar{A}}{\partial A} = k \left[ I + (I + kA)g^{-1} \right] g^{-1}$$
 
-4. **Identify $\bar{A}$**: Since $\bar{A} = (I + kA)M^{-1}$:
+4. **Identify $\bar{A}$**: Since $\bar{A} = (I + kA)g^{-1}$:
    $$\frac{\partial \bar{A}}{\partial A} = k (I + \bar{A}) (I - kA)^{-1}$$
 
 5. **Final Substitution**: Replacing $k$ back with $\frac{\Delta}{2}$:
@@ -157,16 +157,7 @@ $$\frac{\partial \mathcal{L}}{\partial A} = \underbrace{\left( \frac{\partial \m
 **Substituting the analytical derivatives:**
 $$\frac{\partial \mathcal{L}}{\partial A} = \left( g_{\bar{A}} \cdot \frac{\Delta}{2}(I + \bar{A})(I - \frac{\Delta}{2}A)^{-1} \right) + \left( g_{\bar{B}} \cdot \frac{\Delta}{2}\bar{B}(I - \frac{\Delta}{2}A)^{-1} \right)$$
 
-**2. Total Gradient for Parameter $B$**
-Parameter $B$ only affects the discrete $\bar{B}$:
-$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial \bar{B}} \cdot \frac{\partial \bar{B}}{\partial B} = g_{\bar{B}} \cdot \left(I - \frac{\Delta}{2}A\right)^{-1} \sqrt{\Delta}$$
-
-**Definition of Terms:**
-- $g_{\bar{A}}, g_{\bar{B}}$ : The gradients flowed back from the discrete-time S4 layer.
-- $\Delta$ : The step size (sampling time).
-- $\sqrt{\Delta}$ : Scaling factor to preserve variance across different sampling rates.
-
-> **Note on Implementation:** The inverse term $(I - \frac{\Delta}{2}A)^{-1}$ is often computed efficiently using the Woodbury Identity or by exploiting the diagonal-plus-low-rank structure of $A$ in S4.
+**
 
 ---
 
