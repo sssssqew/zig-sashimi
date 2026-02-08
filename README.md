@@ -43,7 +43,9 @@ The engine dynamically switches strategies at a 1024-step threshold.
 | **SIMD Log** | $> 1024$ | **~35ms** | **`0e0`** | Long-range Training |
 
 
-![Kernel Benchmark Results](./docs/images/benchmark_result.png)
+![Kernel Benchmark Results (short sequence)](<img width="636" height="425" alt="Image" src="https://github.com/user-attachments/assets/e574ea8c-5dd5-463e-b7f4-f14df654b7a2" />)
+
+![Kernel Benchmark Results (long sequence)](<img width="653" height="418" alt="Image" src="https://github.com/user-attachments/assets/78c309c2-a45a-48b1-ba78-d5527502d74a" />)
 
 ## 📊 Results: Signal Denoising Success
 

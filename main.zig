@@ -281,7 +281,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     // 1. 테스트 데이터 준비 (시퀀스 길이를 좀 길게 잡아야 차이가 확 보입니다)
-    const seq_len = 1000000;
+    const seq_len = 1000;
     const result_base = try allocator.alloc(Complex, seq_len);
     const result_normal = try allocator.alloc(Complex, seq_len);
     const result_simd = try allocator.alloc(Complex, seq_len);
@@ -318,7 +318,7 @@ pub fn main() !void {
     const end_simd = timer.read();
     const duration_simd = end_simd - start_simd;
 
-    // --- Normal Log Loop (Seqencial) 측정 ---
+    // --- Seqencial Loop 측정 ---
     const start_normal_seq = timer.read();
     try Complex.generateKernelSequential(a_bar, b_bar, c, result_seq);
     const end_normal_seq = timer.read();
@@ -330,24 +330,29 @@ pub fn main() !void {
     const end_normal_optimized = timer.read();
     const duration_normal_optimized = end_normal_optimized - start_normal_optimized;
 
-    // 2. 결과 출력
+    // 2. 결과 출력 (좌측 정렬 너비 30, 우측 정렬 너비 12로 통일)
     std.debug.print("\n=== Benchmark Results (Seq Len: {d}) ===\n", .{seq_len});
-    std.debug.print("Base Log Loop: {d:>10} ns\n", .{duration_base});
-    std.debug.print("Normal Log Loop: {d:>10} ns\n", .{duration_normal});
-    std.debug.print("SIMD Log Loop  : {d:>10} ns\n", .{duration_simd});
-    std.debug.print("Normal Log Loop (sequencial)  : {d:>10} ns\n", .{duration_normal_seq});
-    std.debug.print("Optimzed SIMD  : {d:>10} ns\n", .{duration_normal_optimized});
+    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Base Loop", duration_base });
+    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Normal Log Loop", duration_normal });
+    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "SIMD Log Loop", duration_simd });
+    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Sequential Loop", duration_normal_seq });
+    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Hybrid Dispatcher", duration_normal_optimized });
 
+    std.debug.print("\n--- Speedup Analysis (vs SIMD) ---\n", .{});
     const speedup_base = @as(f64, @floatFromInt(duration_base)) / @as(f64, @floatFromInt(duration_simd));
     const speedup_normal = @as(f64, @floatFromInt(duration_normal)) / @as(f64, @floatFromInt(duration_simd));
     const speedup_seq = @as(f64, @floatFromInt(duration_normal_seq)) / @as(f64, @floatFromInt(duration_simd));
     const speedup_optimized = @as(f64, @floatFromInt(duration_normal_optimized)) / @as(f64, @floatFromInt(duration_simd));
-    std.debug.print("Speedup (base/SIMD)       : {d:.2}x\n", .{speedup_base});
-    std.debug.print("Speedup (nomral/SIMD)       : {d:.2}x\n", .{speedup_normal});
-    std.debug.print("Speedup (sequencial/SIMD)       : {d:.2}x\n", .{speedup_seq});
-    std.debug.print("Speedup (optimized/SIMD)       : {d:.2}x\n", .{speedup_optimized});
+
+    std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Base/SIMD)", speedup_base });
+    std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Normal/SIMD)", speedup_normal });
+    std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Sequential/SIMD)", speedup_seq });
+    std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Optimized/SIMD)", speedup_optimized });
 
     // 3. 검증 (두 결과가 수학적으로 같은지 확인)
+    std.debug.print("\n--- Validation (Tolerance: 1e-5) ---\n", .{});
+
+    // Base vs SIMD
     var max_diff: f32 = 0;
     for (result_base, 0..) |n, i| {
         const diff_re = @abs(n.re - result_simd[i].re);
@@ -355,14 +360,9 @@ pub fn main() !void {
         if (diff_re > max_diff) max_diff = diff_re;
         if (diff_im > max_diff) max_diff = diff_im;
     }
+    std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Base/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
 
-    std.debug.print("Max Difference : {e}\n", .{max_diff});
-    if (max_diff < 1e-5) {
-        std.debug.print("Validation (base/SIMD): PASSED ✅\n", .{});
-    } else {
-        std.debug.print("Validation (base/SIMD): FAILED ❌\n", .{});
-    }
-
+    // Normal vs SIMD
     max_diff = 0;
     for (result_normal, 0..) |n, i| {
         const diff_re = @abs(n.re - result_simd[i].re);
@@ -370,14 +370,9 @@ pub fn main() !void {
         if (diff_re > max_diff) max_diff = diff_re;
         if (diff_im > max_diff) max_diff = diff_im;
     }
+    std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Normal/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
 
-    std.debug.print("Max Difference : {e}\n", .{max_diff});
-    if (max_diff < 1e-5) {
-        std.debug.print("Validation (normal/SIMD): PASSED ✅\n", .{});
-    } else {
-        std.debug.print("Validation (normal/SIMD): FAILED ❌\n", .{});
-    }
-
+    // Sequential vs SIMD
     max_diff = 0;
     for (result_seq, 0..) |n, i| {
         const diff_re = @abs(n.re - result_simd[i].re);
@@ -385,14 +380,9 @@ pub fn main() !void {
         if (diff_re > max_diff) max_diff = diff_re;
         if (diff_im > max_diff) max_diff = diff_im;
     }
+    std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Seq/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
 
-    std.debug.print("Max Difference : {e}\n", .{max_diff});
-    if (max_diff < 1e-5) {
-        std.debug.print("Validation (sequencial/simd): PASSED ✅\n", .{});
-    } else {
-        std.debug.print("Validation (sequencial/simd): FAILED ❌\n", .{});
-    }
-
+    // Optimized vs SIMD
     max_diff = 0;
     for (result_optimized, 0..) |n, i| {
         const diff_re = @abs(n.re - result_simd[i].re);
@@ -400,11 +390,5 @@ pub fn main() !void {
         if (diff_re > max_diff) max_diff = diff_re;
         if (diff_im > max_diff) max_diff = diff_im;
     }
-
-    std.debug.print("Max Difference : {e}\n", .{max_diff});
-    if (max_diff < 1e-5) {
-        std.debug.print("Validation  (optimized/simd): PASSED ✅\n", .{});
-    } else {
-        std.debug.print("Validation  (optimized/simd): FAILED ❌\n", .{});
-    }
+    std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Opt/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
 }
