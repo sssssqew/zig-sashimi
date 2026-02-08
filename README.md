@@ -88,7 +88,6 @@ In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$
 When using the kernel $K_{t} = C A^{t} B$:
 
 * **Kernel Gradient**: Calculated via the convolution of the output error with the input signal $u$. Let's call this `grad_K`.
-
 * **Backprop to $A$**:
     $$\frac{\partial \mathcal{L}}{\partial A} = \text{grad\_K}_{t} \cdot (C \cdot t A^{t-1} \cdot B)$$
     * **Point**: Applying the power rule to $A^{t}$ gives $t A^{t-1}$. This matches our **iota vector** ($t$) implementation in Zig.
