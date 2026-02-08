@@ -113,9 +113,17 @@ $$\bar{A} = (I + \frac{\Delta}{2}A)(I - \frac{\Delta}{2}A)^{-1}, \quad \bar{B} =
 ---
 
 ### 4. Full BPTT (Temporal Gradient Flow)
+
 The gradient travels to the past through the recurrent chain:
-$$\frac{\partial \mathcal{L}}{\partial x_{t-1}} = (\text{err}_{t-1} \cdot C) + (\frac{\partial \mathcal{L}}{\partial x_{t}} \cdot A)$$
-* **Intuition**: The "future" error is back-propagated by multiplying with the transition matrix $A$.
+
+$$\frac{\partial L}{\partial x_{t-1}} = (e_{t-1} \cdot C) + \left( \frac{\partial L}{\partial x_{t}} \cdot A \right)$$
+
+
+
+**Intuition:**
+* The term $(e_{t-1} \cdot C)$ captures the immediate error from the current output.
+* The term $(\frac{\partial L}{\partial x_{t}} \cdot A)$ propagates the "future" error back to the previous state through the transition matrix $A$.
+* This recursive chain allows the model to learn long-range dependencies by flowing gradients across time steps.
 
 
 ## 📊 Results: Signal Denoising Success
