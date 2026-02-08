@@ -76,15 +76,17 @@ In the state equation $x_{t} = A x_{t-1} + B u_{t}$ and output $y_{t} = C x_{t}$
 
 
 **Parameter $C$ Gradient**
-$$\frac{\partial L}{\partial C} = e_{t} \cdot \text{conj}(x_{t})$$
+$$\frac{\partial \mathcal{L}}{\partial C} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial C} = e_{t} \cdot \text{conj}(x_{t})$$
 
 **Parameter $B$ Gradient**
-$$\frac{\partial L}{\partial B} = (e_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$
+$$\frac{\partial \mathcal{L}}{\partial B} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial x_{t}} \cdot \frac{\partial x_{t}}{\partial B} = (e_{t} \cdot \text{conj}(C)) \cdot \text{conj}(u_{t})$$
 
 **Parameter $A$ Gradient**
-$$\frac{\partial L}{\partial A} = (e_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
+$$\frac{\partial \mathcal{L}}{\partial A} = \frac{\partial \mathcal{L}}{\partial y_{t}} \cdot \frac{\partial y_{t}}{\partial x_{t}} \cdot \frac{\partial x_{t}}{\partial A} = (e_{t} \cdot \text{conj}(C)) \cdot \text{conj}(x_{t-1})$$
 
-*(Note: $e_{t}$ represents the error signal at time $t$)*
+**Definition of Terms:**
+- $e_{t} = \frac{\partial \mathcal{L}}{\partial y_{t}}$ : The error signal (gradient of loss w.r.t output) at time $t$.
+- $\text{conj}(\cdot)$ : Complex conjugate, used to align the gradient phase in complex space.
 
 > **Why use `conj`?**
 > To move the error back to the parameter in complex space, we use the conjugate to align the phase for steepest descent.
