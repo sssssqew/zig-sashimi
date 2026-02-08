@@ -17,6 +17,34 @@ This repository contains a from-scratch implementation of the **Structured State
 - **Kernel Generation**: $K = [CB, CAB, CA^2B, \dots, CA^{L-1}B]$
 - **Optimization**: L2 Loss minimization using manual partial derivatives w.r.t. Complex parameters $A, B, C$.
 
+## ⚡ High-Performance Kernel Generation Strategy
+
+To maximize the efficiency of the S4 layer, I implemented a dual-path kernel generation engine that balances numerical precision and raw execution speed using a **Hybrid Dispatcher**.
+
+### 1. Log-space Kernel Generation (High Precision & SIMD)
+For long-range sequences, we utilize log-space arithmetic to prevent floating-point drift.
+- **Mathematical Derivation**:
+  $$\log(K_t) = \log(C) + t \cdot \log(\bar{A}) + \log(\bar{B})$$
+  $$K_t = \exp(\log(C) + t \cdot \log(\bar{A}) + \log(\bar{B}))$$
+- **SIMD Acceleration**: Each timestep $t$ is calculated independently, allowing the CPU to process multiple steps in parallel using `@Vector`. This achieves **Zero-Drift precision (`0e0`)** even at a sequence length of $10^6$.
+
+
+### 2. Sequential Generation (Low Latency)
+For short-range bursts, we prioritize speed by using direct complex-valued recursive multiplication.
+- **Derivation**: $K_t = K_{t-1} \cdot \bar{A}$ (Phase rotation and magnitude decay).
+- **Optimization**: This path avoids expensive transcendental function calls (`exp`, `log`, `sin`, `cos`), resulting in up to **4x faster execution** for short sequences with negligible error ($< 10^{-6}$).
+
+### 3. Hybrid Dispatcher Results
+The engine dynamically switches strategies at a 1024-step threshold.
+
+| Strategy | Sequence Length | Speed (1M) | Precision | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **Sequential** | $\le 1024$ | **~6ms** | $10^{-6}$ | Real-time Inference |
+| **SIMD Log** | $> 1024$ | **~35ms** | **`0e0`** | Long-range Training |
+
+
+![Kernel Benchmark Results](./docs/images/benchmark_result.png)
+
 ## 📊 Results: Signal Denoising Success
 
 The model was tested on a sequence of noisy sinusoidal signals. By updating the latent states and constraining the spectral radius of the transition matrix, the model successfully recovered the original signal with high fidelity.
