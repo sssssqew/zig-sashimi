@@ -518,4 +518,191 @@ pub const Complex = struct {
             result[i] = array[i].mul(scalar);
         }
     }
+
+    // 복수소 연산 병렬화 (SIMD)
+    fn Vector(comptime n: usize) type {
+        return @Vector(n, f32);
+    }
+
+    fn ComplexVector(comptime n: usize) type {
+        return struct {
+            reV: Vector(n),
+            imV: Vector(n),
+        };
+    }
+
+    // inline : 함수 코드를 컴파일할때 호출부분에 넣어서 함수 호출 오버헤드 감소
+    inline fn vLoad(ptr: [*]const Complex, comptime n: usize) Vector(n * 2) {
+        return @bitCast(ptr[0..n].*);
+    }
+    inline fn vStore(ptr: [*]Complex, comptime n: usize, cv: Vector(n * 2)) void {
+        ptr[0..n].* = @bitCast(cv);
+    }
+    inline fn vConj(comptime n: usize, cv: ComplexVector(n)) ComplexVector(n) {
+        return .{ .reV = cv.reV, .imV = -cv.imV };
+    }
+    inline fn vScale(comptime n: usize, cv: ComplexVector(n), s: f32) ComplexVector(n) {
+        const sV: Vector(n) = @splat(s);
+        return .{ .reV = cv.reV * sV, .imV = cv.imV * sV };
+    }
+    inline fn vAdd(comptime n: usize, aV: ComplexVector(n), bV: ComplexVector(n)) ComplexVector(n) {
+        return .{ .reV = aV.reV + bV.reV, .imV = aV.imV + bV.imV };
+    }
+    inline fn vSub(comptime n: usize, aV: ComplexVector(n), bV: ComplexVector(n)) ComplexVector(n) {
+        return .{ .reV = aV.reV - bV.reV, .imV = aV.imV - bV.imV };
+    }
+    inline fn vMul(comptime n: usize, aV: ComplexVector(n), bV: ComplexVector(n)) ComplexVector(n) {
+        const resRe = (aV.reV * bV.reV) - (aV.imV * bV.imV);
+        const resIm = (aV.reV * bV.imV) + (aV.imV * bV.reV);
+        return .{ .reV = resRe, .imV = resIm };
+    }
+    inline fn vDiv(comptime n: usize, aV: ComplexVector(n), bV: ComplexVector(n)) ComplexError!ComplexVector(n) {
+        const denom = bV.reV * bV.reV + bV.imV * bV.imV;
+        if (denom < 1e-12) return ComplexError.DivisionByZero;
+        std.debug.assert(denom != 0);
+
+        const reV = (aV.reV * bV.reV + aV.imV * bV.imV) / denom;
+        const imV = (aV.imV * bV.reV - aV.reV * bV.imV) / denom;
+        return .{ .reV = reV, .imV = imV };
+    }
+    inline fn vOp(comptime n: usize, aV: ComplexVector(n), bV: ComplexVector(n), comptime mode: OpMode) !ComplexVector(n) {
+        return switch (mode) {
+            .add => vAdd(n, aV, bV),
+            .sub => vSub(n, aV, bV),
+            .mul => vMul(n, aV, bV),
+            .div => try vDiv(n, aV, bV),
+        };
+    }
+    inline fn cOp(a: Complex, b: Complex, comptime mode: OpMode) !Complex {
+        return switch (mode) {
+            .add => a.add(b),
+            .sub => a.sub(b),
+            .mul => a.mul(b),
+            .div => try a.div(b),
+        };
+    }
+    inline fn prepareComplexVector(
+        comptime n: usize,
+        ptr: [*]const Complex,
+        comptime reMask: [n]i32,
+        comptime imMask: [n]i32,
+        comptime option: arrOption,
+    ) ComplexVector(n) {
+        const raw: Vector(n * 2) = vLoad(ptr, n);
+        var cv: ComplexVector(n) = shuffleComplex(n, raw, reMask, imMask);
+        if (option.conj) cv = vConj(n, cv);
+        if (option.scale != 1.0) cv = vScale(n, cv, option.scale);
+        return cv;
+    }
+    inline fn prepareComplex(c: Complex, comptime option: arrOption) Complex {
+        var refined = c;
+        if (option.conj) refined = refined.conj();
+        if (option.scale != 1.0) refined = refined.scale(option.scale);
+        return refined;
+    }
+    // comptime: 컴파일 시간에 결정되어야 할 값 (타입생성, 배열크기 등)
+    fn makeSuffleMask(comptime n: usize, comptime offset: usize) [n]i32 {
+        var mask: [n]i32 = undefined;
+        for (&mask, 0..) |*m, i| {
+            m.* = @intCast(i * 2 + offset);
+        }
+        return mask;
+    }
+    fn makeStoreMask(comptime n: usize) [n * 2]i32 {
+        var mask: [n * 2]i32 = undefined;
+        for (0..n) |i| {
+            mask[i * 2] = i;
+            mask[i * 2 + 1] = i + n;
+        }
+        return mask;
+    }
+    inline fn shuffleComplex(comptime n: usize, cv: @Vector(n * 2, f32), comptime reMask: [n]i32, comptime imMask: [n]i32) ComplexVector(n) {
+        const reV = @shuffle(f32, cv, undefined, reMask);
+        const imV = @shuffle(f32, cv, undefined, imMask);
+        return .{ .reV = reV, .imV = imV };
+    }
+    inline fn restoreComplex(comptime n: usize, cv: ComplexVector(n), comptime mask: [n * 2]i32) Vector(n * 2) {
+        return @shuffle(f32, cv.reV, cv.imV, mask);
+    }
+    const OpMode = enum { mul, add, sub, div };
+    const arrOption = struct {
+        conj: bool = false,
+        scale: f32 = 1.0,
+    };
+    const convOptions = struct {
+        mode: OpMode = .mul,
+        a: arrOption = .{},
+        b: arrOption = .{},
+        out: arrOption = .{},
+        acc_index: bool = false,
+        acc_total: bool = false,
+    };
+
+    pub fn generalComplexOpSIMD(
+        a: []const Complex,
+        b: ?[]const Complex,
+        result: []Complex,
+        comptime opt: convOptions,
+    ) !Complex {
+        const vectorSize: usize = std.simd.suggestVectorLength(f32) orelse 4;
+        const numOfComplex = vectorSize / 2;
+        const len = a.len;
+
+        const reMask: [numOfComplex]i32 = comptime makeSuffleMask(numOfComplex, 0);
+        const imMask: [numOfComplex]i32 = comptime makeSuffleMask(numOfComplex, 1);
+        const storeMask: [vectorSize]i32 = comptime makeStoreMask(numOfComplex);
+
+        var i: usize = 0;
+        var totalReV: Vector(numOfComplex) = @splat(0.0);
+        var totalImV: Vector(numOfComplex) = @splat(0.0);
+        while (i + numOfComplex <= len) : (i += numOfComplex) {
+            var resV: ComplexVector(numOfComplex) = prepareComplexVector(numOfComplex, a.ptr + i, reMask, imMask, opt.a);
+
+            if (b) |bSafe| {
+                const bV = prepareComplexVector(numOfComplex, bSafe.ptr + i, reMask, imMask, opt.b);
+                resV = try vOp(numOfComplex, resV, bV);
+            }
+
+            if (opt.out.conj) resV = vConj(numOfComplex, resV);
+            if (opt.out.scale != 1.0) resV = vScale(numOfComplex, resV, opt.out.scale);
+
+            const combined: Vector(vectorSize) = restoreComplex(numOfComplex, resV, storeMask);
+
+            if (opt.acc_index) {
+                const currentVal: Vector(vectorSize) = vLoad(result.ptr + i, numOfComplex); // 1. 기존 메모리 값을 로드 (복소수 n개만큼)
+                vStore(result.ptr + i, numOfComplex, combined + currentVal); // 2. 벡터 더하기 (한 번에 8개의 f32가 더해집니다)
+            } else {
+                vStore(result.ptr + i, numOfComplex, combined);
+            }
+
+            if (opt.acc_total) {
+                totalReV += resV.reV;
+                totalImV += resV.imV;
+            }
+        }
+        var total: Complex = Complex.init(0.0, 0.0);
+        while (i < len) : (i += 1) {
+            var res = prepareComplex(a[i], opt.a);
+
+            if (b) |bSafe| {
+                const refinedB = prepareComplex(bSafe[i], opt.b);
+                res = try res.cOp(refinedB);
+            }
+            if (opt.out.conj) res = res.conj();
+            if (opt.out.scale != 1.0) res = res.scale(opt.out.scale);
+
+            if (opt.acc_index) {
+                result[i] += res;
+            } else {
+                result[i] = res;
+            }
+            if (opt.acc_total) {
+                total = total.add(res);
+            }
+        }
+        if (opt.acc_total) {
+            return .{ .re = @reduce(.Add, totalReV) + total.re, .im = @reduce(.Add, totalImV) + total.im };
+        }
+        return .{ .re = 0.0, .im = 0.0 };
+    }
 };
