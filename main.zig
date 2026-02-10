@@ -276,119 +276,271 @@ pub fn main() !void {
     // std.debug.print("상대적 속도: 로그 방식이 리니어보다 {d:.2}배 더 걸림\n", .{ratio});
 
     // 커널생성 SIMD 여부에 따른 성능 테스트
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // const allocator = gpa.allocator();
+    // defer _ = gpa.deinit();
+
+    // // 1. 테스트 데이터 준비 (시퀀스 길이를 좀 길게 잡아야 차이가 확 보입니다)
+    // const seq_len = 1000;
+    // const result_base = try allocator.alloc(Complex, seq_len);
+    // const result_normal = try allocator.alloc(Complex, seq_len);
+    // const result_simd = try allocator.alloc(Complex, seq_len);
+    // const result_seq = try allocator.alloc(Complex, seq_len);
+    // const result_optimized = try allocator.alloc(Complex, seq_len);
+    // defer allocator.free(result_base);
+    // defer allocator.free(result_normal);
+    // defer allocator.free(result_simd);
+    // defer allocator.free(result_seq);
+    // defer allocator.free(result_optimized);
+
+    // // 테스트용 파라미터 (S4 논문에 나올 법한 값들)
+    // const a_bar = Complex.init(0.99999, 0.0001);
+    // const b_bar = Complex.init(0.5, -0.2);
+    // const c = Complex.init(0.3, 0.4);
+
+    // var timer = try std.time.Timer.start();
+
+    // // --- Base Loop 측정 ---
+    // const start_base = timer.read();
+    // try Complex.generateKernelNormal(a_bar, b_bar, c, result_base);
+    // const end_base = timer.read();
+    // const duration_base = end_base - start_base;
+
+    // // --- Normal Log Loop 측정 ---
+    // const start_normal = timer.read();
+    // try Complex.generateKernelWithLog(a_bar, b_bar, c, result_normal);
+    // const end_normal = timer.read();
+    // const duration_normal = end_normal - start_normal;
+
+    // // --- SIMD Log Loop 측정 ---
+    // const start_simd = timer.read();
+    // try Complex.generateKernelWithLogAndSIMD(a_bar, b_bar, c, result_simd);
+    // const end_simd = timer.read();
+    // const duration_simd = end_simd - start_simd;
+
+    // // --- Seqencial Loop 측정 ---
+    // const start_normal_seq = timer.read();
+    // try Complex.generateKernelSequential(a_bar, b_bar, c, result_seq);
+    // const end_normal_seq = timer.read();
+    // const duration_normal_seq = end_normal_seq - start_normal_seq;
+
+    // // --- Optimized SIMD 측정 ---
+    // const start_normal_optimized = timer.read();
+    // try Complex.generateKernel(a_bar, b_bar, c, result_optimized);
+    // const end_normal_optimized = timer.read();
+    // const duration_normal_optimized = end_normal_optimized - start_normal_optimized;
+
+    // // 2. 결과 출력 (좌측 정렬 너비 30, 우측 정렬 너비 12로 통일) /
+    // std.debug.print("\n=== Benchmark Results (Seq Len: {d}) ===\n", .{seq_len});
+    // std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Base Loop", duration_base });
+    // std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Normal Log Loop", duration_normal });
+    // std.debug.print("{s:<30}: {d:>12} ns\n", .{ "SIMD Log Loop", duration_simd });
+    // std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Sequential Loop", duration_normal_seq });
+    // std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Hybrid Dispatcher", duration_normal_optimized });
+
+    // std.debug.print("\n--- Speedup Analysis (vs SIMD) ---\n", .{});
+    // const speedup_base = @as(f64, @floatFromInt(duration_base)) / @as(f64, @floatFromInt(duration_simd));
+    // const speedup_normal = @as(f64, @floatFromInt(duration_normal)) / @as(f64, @floatFromInt(duration_simd));
+    // const speedup_seq = @as(f64, @floatFromInt(duration_normal_seq)) / @as(f64, @floatFromInt(duration_simd));
+    // const speedup_optimized = @as(f64, @floatFromInt(duration_normal_optimized)) / @as(f64, @floatFromInt(duration_simd));
+
+    // std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Base/SIMD)", speedup_base });
+    // std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Normal/SIMD)", speedup_normal });
+    // std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Sequential/SIMD)", speedup_seq });
+    // std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Optimized/SIMD)", speedup_optimized });
+
+    // // 3. 검증 (두 결과가 수학적으로 같은지 확인)
+    // std.debug.print("\n--- Validation (Tolerance: 1e-5) ---\n", .{});
+
+    // // Base vs SIMD
+    // var max_diff: f32 = 0;
+    // for (result_base, 0..) |n, i| {
+    //     const diff_re = @abs(n.re - result_simd[i].re);
+    //     const diff_im = @abs(n.im - result_simd[i].im);
+    //     if (diff_re > max_diff) max_diff = diff_re;
+    //     if (diff_im > max_diff) max_diff = diff_im;
+    // }
+    // std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Base/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
+
+    // // Normal vs SIMD
+    // max_diff = 0;
+    // for (result_normal, 0..) |n, i| {
+    //     const diff_re = @abs(n.re - result_simd[i].re);
+    //     const diff_im = @abs(n.im - result_simd[i].im);
+    //     if (diff_re > max_diff) max_diff = diff_re;
+    //     if (diff_im > max_diff) max_diff = diff_im;
+    // }
+    // std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Normal/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
+
+    // // Sequential vs SIMD
+    // max_diff = 0;
+    // for (result_seq, 0..) |n, i| {
+    //     const diff_re = @abs(n.re - result_simd[i].re);
+    //     const diff_im = @abs(n.im - result_simd[i].im);
+    //     if (diff_re > max_diff) max_diff = diff_re;
+    //     if (diff_im > max_diff) max_diff = diff_im;
+    // }
+    // std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Seq/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
+
+    // // Optimized vs SIMD
+    // max_diff = 0;
+    // for (result_optimized, 0..) |n, i| {
+    //     const diff_re = @abs(n.re - result_simd[i].re);
+    //     const diff_im = @abs(n.im - result_simd[i].im);
+    //     if (diff_re > max_diff) max_diff = diff_re;
+    //     if (diff_im > max_diff) max_diff = diff_im;
+    // }
+    // std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Opt/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
+
+    // 1. 초기 데이터 준비 (len = 3)
+    // var a = [_]Complex{
+    //     .{ .re = 1.0, .im = 1.0 },
+    //     .{ .re = 2.0, .im = 2.0 },
+    //     .{ .re = 3.0, .im = 3.0 },
+    // };
+    // var b = [_]Complex{
+    //     .{ .re = 1.0, .im = -1.0 },
+    //     .{ .re = 1.0, .im = -1.0 },
+    //     .{ .re = 1.0, .im = -1.0 },
+    // };
+    // var result = [_]Complex{ Complex.init(0, 0), Complex.init(0, 0), Complex.init(0, 0) };
+
+    // // 2. 테스트 옵션 설정
+    // const opt = Complex.convOptions{
+    //     .mode = .mul,
+    //     .a = .{ .conj = true, .scale = 2.0 }, // A를 켤레 취하고 2배 스케일링
+    //     .acc_index = true, // 기존 result에 더함
+    //     .acc_total = true, // 전체 합산 반환
+    // };
+
+    // // 3. 실행 시간 측정 시작
+    // var start = try std.time.Timer.start();
+
+    // // 4. 함수 실행
+    // const total_sum = try Complex.generalComplexOpSIMD(&a, &b, &result, opt);
+    // const end = start.read();
+
+    // // 5. 결과 출력
+    // std.debug.print("--- Test Results (len=3) ---\n", .{});
+    // for (result, 0..) |res, i| {
+    //     std.debug.print("Result[{d}]: {d:.2} + {d:.2}i\n", .{ i, res.re, res.im });
+    // }
+    // std.debug.print("Total Sum: {d:.2} + {d:.2}i\n", .{ total_sum.re, total_sum.im });
+    // std.debug.print("Execution Time: {d} ns\n", .{end});
+
+    // 덧셈 테스트
+    // const opt_add = Complex.convOptions{
+    //     .mode = .add,
+    //     .a = .{ .conj = true, .scale = 2.0 },
+    //     .b = .{ .conj = true, .scale = 0.5 },
+    //     .out = .{ .conj = true, .scale = 1.0 },
+    //     .acc_total = true,
+    // };
+    // const sum_add = try Complex.generalComplexOpSIMD(&a, &b, &result, opt_add);
+    // std.debug.print("Add Sum: {d:.2} + {d:.2}i\n", .{ sum_add.re, sum_add.im });
+
+    // // 뺄셈 테스트
+    // result = [_]Complex{ Complex.init(0, 0), Complex.init(0, 0), Complex.init(0, 0) };
+    // const opt_sub = Complex.convOptions{
+    //     .mode = .sub,
+    //     .a = .{ .conj = true, .scale = 2.0 },
+    //     .b = .{ .conj = true, .scale = 0.5 },
+    //     .out = .{ .conj = true, .scale = 1.0 },
+    //     .acc_total = true,
+    // };
+    // const sum_sub = try Complex.generalComplexOpSIMD(&a, &b, &result, opt_sub);
+    // std.debug.print("Sub Sum: {d:.2} + {d:.2}i\n", .{ sum_sub.re, sum_sub.im });
+
+    // // 나눗셈 테스트
+    // result = [_]Complex{ Complex.init(0, 0), Complex.init(0, 0), Complex.init(0, 0) };
+    // const opt_div = Complex.convOptions{
+    //     .mode = .div,
+    //     .a = .{ .conj = true, .scale = 2.0 },
+    //     .b = .{ .conj = true, .scale = 0.5 },
+    //     .out = .{ .conj = true, .scale = 1.0 },
+    //     .acc_total = true,
+    // };
+    // const sum_div = try Complex.generalComplexOpSIMD(&a, &b, &result, opt_div);
+    // std.debug.print("Div Sum: {d:.2} + {d:.2}i\n", .{ sum_div.re, sum_div.im });
+
+    // 1. 설정값 (여기서 시퀀스 길이를 조절하세요!)
+    const seq_len: usize = 100000000;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-    // 1. 테스트 데이터 준비 (시퀀스 길이를 좀 길게 잡아야 차이가 확 보입니다)
-    const seq_len = 1000;
-    const result_base = try allocator.alloc(Complex, seq_len);
-    const result_normal = try allocator.alloc(Complex, seq_len);
-    const result_simd = try allocator.alloc(Complex, seq_len);
-    const result_seq = try allocator.alloc(Complex, seq_len);
-    const result_optimized = try allocator.alloc(Complex, seq_len);
-    defer allocator.free(result_base);
-    defer allocator.free(result_normal);
-    defer allocator.free(result_simd);
-    defer allocator.free(result_seq);
-    defer allocator.free(result_optimized);
+    // 2. 메모리 할당
+    const a = try allocator.alloc(Complex, seq_len);
+    const b = try allocator.alloc(Complex, seq_len);
+    const res_simd = try allocator.alloc(Complex, seq_len);
+    const res_scalar = try allocator.alloc(Complex, seq_len);
+    defer allocator.free(a);
+    defer allocator.free(b);
+    defer allocator.free(res_simd);
+    defer allocator.free(res_scalar);
 
-    // 테스트용 파라미터 (S4 논문에 나올 법한 값들)
-    const a_bar = Complex.init(0.99999, 0.0001);
-    const b_bar = Complex.init(0.5, -0.2);
-    const c = Complex.init(0.3, 0.4);
+    // 3. 랜덤 데이터 생성 (A, B)
+    var seed: u64 = undefined;
+    try std.posix.getrandom(std.mem.asBytes(&seed)); // OS에서 안전한 랜덤 시드를 가져옵니다.
+    var prng = std.Random.DefaultPrng.init(seed);
+    const rand = prng.random();
+    for (0..seq_len) |i| {
+        a[i] = .{ .re = rand.float(f32) * 10, .im = rand.float(f32) * 10 };
+        b[i] = .{ .re = rand.float(f32) * 10, .im = rand.float(f32) * 10 };
+        res_simd[i] = Complex.init(0, 0);
+        res_scalar[i] = Complex.init(0, 0);
+    }
 
+    const opt = Complex.convOptions{
+        .mode = .mul, // mul, add, sub, div 중 선택
+        .a = .{ .conj = true, .scale = 1.5 },
+        .b = .{ .conj = false, .scale = 0.8 },
+        .out = .{ .conj = true, .scale = 2.0 },
+        .acc_total = true,
+    };
+
+    std.debug.print("Benchmarking with sequence length: {d}\n\n", .{seq_len});
+
+    // --- 일반 루프 측정 ---
     var timer = try std.time.Timer.start();
+    const total_scalar = try Complex.generalComplexOp(a, b, res_scalar, opt);
+    const time_scalar = timer.read();
 
-    // --- Base Loop 측정 ---
-    const start_base = timer.read();
-    try Complex.generateKernelNormal(a_bar, b_bar, c, result_base);
-    const end_base = timer.read();
-    const duration_base = end_base - start_base;
+    // // --- 캐시 플러싱 (중간에 끼워넣기) ---
+    // {
+    //     const dummy_size = 1024 * 1024 * 16; // 약 64MB
+    //     const dummy = try allocator.alloc(f32, dummy_size);
+    //     defer allocator.free(dummy);
+    //     @memset(dummy, 1.0);
 
-    // --- Normal Log Loop 측정 ---
-    const start_normal = timer.read();
-    try Complex.generateKernelWithLog(a_bar, b_bar, c, result_normal);
-    const end_normal = timer.read();
-    const duration_normal = end_normal - start_normal;
+    //     var s: f32 = 0;
+    //     for (dummy) |val| {
+    //         s += val; // val을 사용해서 "unused variable" 에러 방지
+    //     }
+    //     std.mem.doNotOptimizeAway(s); // 컴파일러가 루프를 삭제하지 못하게 고정
+    // }
 
-    // --- SIMD Log Loop 측정 ---
-    const start_simd = timer.read();
-    try Complex.generateKernelWithLogAndSIMD(a_bar, b_bar, c, result_simd);
-    const end_simd = timer.read();
-    const duration_simd = end_simd - start_simd;
+    // --- SIMD 루프 측정 ---
+    // var timer = try std.time.Timer.start();
+    // const total_simd = try Complex.generalComplexOpSIMD(a, b, res_simd, opt);
+    // const time_simd = timer.read();
 
-    // --- Seqencial Loop 측정 ---
-    const start_normal_seq = timer.read();
-    try Complex.generateKernelSequential(a_bar, b_bar, c, result_seq);
-    const end_normal_seq = timer.read();
-    const duration_normal_seq = end_normal_seq - start_normal_seq;
+    // 4. 결과 출력 및 오차 비교
+    // const diff_re = @abs(total_simd.re - total_scalar.re);
+    // const diff_im = @abs(total_simd.im - total_scalar.im);
 
-    // --- Optimized SIMD 측정 ---
-    const start_normal_optimized = timer.read();
-    try Complex.generateKernel(a_bar, b_bar, c, result_optimized);
-    const end_normal_optimized = timer.read();
-    const duration_normal_optimized = end_normal_optimized - start_normal_optimized;
+    // std.debug.print("1. SIMD Results:\n", .{});
+    // std.debug.print("   - Time: {d:>10} ns ({d:.2} ms)\n", .{ time_simd, @as(f64, @floatFromInt(time_simd)) / 1_000_000.0 });
+    // std.debug.print("   - Sum : {d:.4} + {d:.4}i\n\n", .{ total_simd.re, total_simd.im });
 
-    // 2. 결과 출력 (좌측 정렬 너비 30, 우측 정렬 너비 12로 통일) /
-    std.debug.print("\n=== Benchmark Results (Seq Len: {d}) ===\n", .{seq_len});
-    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Base Loop", duration_base });
-    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Normal Log Loop", duration_normal });
-    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "SIMD Log Loop", duration_simd });
-    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Sequential Loop", duration_normal_seq });
-    std.debug.print("{s:<30}: {d:>12} ns\n", .{ "Hybrid Dispatcher", duration_normal_optimized });
+    std.debug.print("2. Scalar Results:\n", .{});
+    std.debug.print("   - Time: {d:>10} ns ({d:.2} ms)\n", .{ time_scalar, @as(f64, @floatFromInt(time_scalar)) / 1_000_000.0 });
+    std.debug.print("   - Sum : {d:.4} + {d:.4}i\n\n", .{ total_scalar.re, total_scalar.im });
 
-    std.debug.print("\n--- Speedup Analysis (vs SIMD) ---\n", .{});
-    const speedup_base = @as(f64, @floatFromInt(duration_base)) / @as(f64, @floatFromInt(duration_simd));
-    const speedup_normal = @as(f64, @floatFromInt(duration_normal)) / @as(f64, @floatFromInt(duration_simd));
-    const speedup_seq = @as(f64, @floatFromInt(duration_normal_seq)) / @as(f64, @floatFromInt(duration_simd));
-    const speedup_optimized = @as(f64, @floatFromInt(duration_normal_optimized)) / @as(f64, @floatFromInt(duration_simd));
+    // std.debug.print("3. Comparison:\n", .{});
+    // std.debug.print("   - Speedup: {d:.2}x\n", .{@as(f64, @floatFromInt(time_scalar)) / @as(f64, @floatFromInt(time_simd))});
+    // std.debug.print("   - Total Sum Error: Re({e}), Im({e})\n", .{ diff_re, diff_im });
 
-    std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Base/SIMD)", speedup_base });
-    std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Normal/SIMD)", speedup_normal });
-    std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Sequential/SIMD)", speedup_seq });
-    std.debug.print("{s:<30}: {d:>12.2}x\n", .{ "Speedup (Optimized/SIMD)", speedup_optimized });
-
-    // 3. 검증 (두 결과가 수학적으로 같은지 확인)
-    std.debug.print("\n--- Validation (Tolerance: 1e-5) ---\n", .{});
-
-    // Base vs SIMD
-    var max_diff: f32 = 0;
-    for (result_base, 0..) |n, i| {
-        const diff_re = @abs(n.re - result_simd[i].re);
-        const diff_im = @abs(n.im - result_simd[i].im);
-        if (diff_re > max_diff) max_diff = diff_re;
-        if (diff_im > max_diff) max_diff = diff_im;
-    }
-    std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Base/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
-
-    // Normal vs SIMD
-    max_diff = 0;
-    for (result_normal, 0..) |n, i| {
-        const diff_re = @abs(n.re - result_simd[i].re);
-        const diff_im = @abs(n.im - result_simd[i].im);
-        if (diff_re > max_diff) max_diff = diff_re;
-        if (diff_im > max_diff) max_diff = diff_im;
-    }
-    std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Normal/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
-
-    // Sequential vs SIMD
-    max_diff = 0;
-    for (result_seq, 0..) |n, i| {
-        const diff_re = @abs(n.re - result_simd[i].re);
-        const diff_im = @abs(n.im - result_simd[i].im);
-        if (diff_re > max_diff) max_diff = diff_re;
-        if (diff_im > max_diff) max_diff = diff_im;
-    }
-    std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Seq/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
-
-    // Optimized vs SIMD
-    max_diff = 0;
-    for (result_optimized, 0..) |n, i| {
-        const diff_re = @abs(n.re - result_simd[i].re);
-        const diff_im = @abs(n.im - result_simd[i].im);
-        if (diff_re > max_diff) max_diff = diff_re;
-        if (diff_im > max_diff) max_diff = diff_im;
-    }
-    std.debug.print("{s:<30}: Diff={e:<10} | {s}\n", .{ "Validation (Opt/SIMD)", max_diff, if (max_diff < 1e-5) "PASSED ✅" else "FAILED ❌" });
+    // const vectorSize: usize = std.simd.suggestVectorLength(f32) orelse 4;
+    // std.debug.print("Vector size: {d}\n", .{vectorSize});
 }

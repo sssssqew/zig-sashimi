@@ -1,7 +1,7 @@
 const std = @import("std");
 
 /// Complex number structure for complex-valued neural network operations
-pub const Complex = struct {
+pub const Complex = extern struct {
     re: f32,
     im: f32,
 
@@ -9,27 +9,27 @@ pub const Complex = struct {
         DivisionByZero,
     };
 
-    pub fn init(re: f32, im: f32) Complex {
+    pub inline fn init(re: f32, im: f32) Complex {
         return .{ .re = re, .im = im };
     }
 
     /// Complex conjugation for gradient calculation and Hermitian operations
-    pub fn conj(self: Complex) Complex {
+    pub inline fn conj(self: Complex) Complex {
         return .{ .re = self.re, .im = self.im * -1 };
     }
 
-    pub fn add(self: Complex, other: Complex) Complex {
+    pub inline fn add(self: Complex, other: Complex) Complex {
         return .{ .re = self.re + other.re, .im = self.im + other.im };
     }
 
-    pub fn sub(self: Complex, other: Complex) Complex {
+    pub inline fn sub(self: Complex, other: Complex) Complex {
         return .{ .re = self.re - other.re, .im = self.im - other.im };
     }
 
-    pub fn mul(self: Complex, other: Complex) Complex {
+    pub inline fn mul(self: Complex, other: Complex) Complex {
         return .{ .re = self.re * other.re - self.im * other.im, .im = self.re * other.im + self.im * other.re };
     }
-    pub fn square(self: Complex) Complex {
+    pub inline fn square(self: Complex) Complex {
         return .{ .re = self.re * self.re - self.im * self.im, .im = 2 * self.re * self.im };
     }
     pub fn mulSIMDWithConj(a: []const Complex, b: []const Complex, result: []Complex) void {
@@ -222,15 +222,15 @@ pub const Complex = struct {
         }
     }
 
-    pub fn addReal(self: Complex, s: f32) Complex {
+    pub inline fn addReal(self: Complex, s: f32) Complex {
         return .{ .re = self.re + s, .im = self.im };
     }
 
-    pub fn scale(self: Complex, s: f32) Complex {
+    pub inline fn scale(self: Complex, s: f32) Complex {
         return .{ .re = self.re * s, .im = self.im * s };
     }
 
-    pub fn div(self: Complex, other: Complex) ComplexError!Complex {
+    pub inline fn div(self: Complex, other: Complex) ComplexError!Complex {
         const denom = other.re * other.re + other.im * other.im;
         if (denom < 1e-12) return ComplexError.DivisionByZero;
         std.debug.assert(denom != 0);
@@ -274,13 +274,13 @@ pub const Complex = struct {
         }
     }
 
-    fn mag(self: Complex) f32 {
+    inline fn mag(self: Complex) f32 {
         return std.math.sqrt(self.re * self.re + self.im * self.im);
     }
-    fn phase(self: Complex) f32 {
+    inline fn phase(self: Complex) f32 {
         return std.math.atan2(self.im, self.re);
     }
-    pub fn ln(self: Complex) Complex {
+    pub inline fn ln(self: Complex) Complex {
         return .{ .re = std.math.log(f32, std.math.e, self.mag()), .im = self.phase() };
     }
 
@@ -520,16 +520,29 @@ pub const Complex = struct {
     }
 
     // 복수소 연산 병렬화 (SIMD)
-    fn Vector(comptime n: usize) type {
+    inline fn Vector(comptime n: usize) type {
         return @Vector(n, f32);
     }
 
-    fn ComplexVector(comptime n: usize) type {
+    inline fn ComplexVector(comptime n: usize) type {
         return struct {
             reV: Vector(n),
             imV: Vector(n),
         };
     }
+
+    // 다른 라이브러리에서 가져온 구조체라 extern을 붙일 수 없다면, vLoad 함수를 다음과 같이 안전하게 수정해야 합니다
+    //     inline fn vLoad(ptr: [*]const Complex, comptime n: usize) Vector(n * 2) {
+    //     // 1. [*]const Complex를 [*]const f32로 먼저 강제 변환합니다.
+    //     const f32_ptr: [*]const f32 = @ptrCast(ptr);
+    //     // 2. 그 주소로부터 f32 n*2개를 가져와서 벡터로 캐스팅합니다.
+    //     return @bitCast(f32_ptr[0 .. n * 2].*);
+    // }
+
+    // inline fn vStore(ptr: [*]Complex, comptime n: usize, cv: Vector(n * 2)) void {
+    //     const f32_ptr: [*]f32 = @ptrCast(ptr);
+    //     f32_ptr[0 .. n * 2].* = @bitCast(cv);
+    // }
 
     // inline : 함수 코드를 컴파일할때 호출부분에 넣어서 함수 호출 오버헤드 감소
     inline fn vLoad(ptr: [*]const Complex, comptime n: usize) Vector(n * 2) {
@@ -559,7 +572,7 @@ pub const Complex = struct {
     inline fn vDiv(comptime n: usize, aV: ComplexVector(n), bV: ComplexVector(n)) ComplexError!ComplexVector(n) {
         const denom = bV.reV * bV.reV + bV.imV * bV.imV;
         if (@reduce(.Or, denom < @as(Vector(n), @splat(1e-12)))) return ComplexError.DivisionByZero;
-        std.debug.assert(denom != 0);
+        std.debug.assert(@reduce(.And, denom >= @as(Vector(n), @splat(1e-12))));
 
         const reV = (aV.reV * bV.reV + aV.imV * bV.imV) / denom;
         const imV = (aV.imV * bV.reV - aV.reV * bV.imV) / denom;
@@ -611,12 +624,12 @@ pub const Complex = struct {
     fn makeStoreMask(comptime n: usize) [n * 2]i32 {
         var mask: [n * 2]i32 = undefined;
         for (0..n) |i| {
-            mask[i * 2] = i;
-            mask[i * 2 + 1] = i + n;
+            mask[i * 2] = @intCast(i);
+            mask[i * 2 + 1] = @intCast(-@as(i32, @intCast(i)) - 1); // shuffle 두번째 벡터의 인덱스 : -1, -2, -3, -4
         }
         return mask;
     }
-    inline fn shuffleComplex(comptime n: usize, cv: @Vector(n * 2, f32), comptime reMask: [n]i32, comptime imMask: [n]i32) ComplexVector(n) {
+    inline fn shuffleComplex(comptime n: usize, cv: Vector(n * 2), comptime reMask: [n]i32, comptime imMask: [n]i32) ComplexVector(n) {
         const reV = @shuffle(f32, cv, undefined, reMask);
         const imV = @shuffle(f32, cv, undefined, imMask);
         return .{ .reV = reV, .imV = imV };
@@ -629,7 +642,7 @@ pub const Complex = struct {
         conj: bool = false,
         scale: f32 = 1.0,
     };
-    const convOptions = struct {
+    pub const convOptions = struct {
         mode: OpMode = .mul,
         a: arrOption = .{},
         b: arrOption = .{},
@@ -637,6 +650,41 @@ pub const Complex = struct {
         acc_index: bool = false,
         acc_total: bool = false,
     };
+
+    // 벤치마크 비교용 일반 루프
+    pub fn generalComplexOp(
+        a: []const Complex,
+        b: ?[]const Complex,
+        result: []Complex,
+        comptime opt: convOptions,
+    ) !Complex {
+        const len = a.len;
+        var total: Complex = Complex.init(0.0, 0.0);
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            var res = prepareComplex(a[i], opt.a);
+
+            if (b) |bSafe| {
+                const refinedB = prepareComplex(bSafe[i], opt.b);
+                res = try cOp(res, refinedB, opt.mode);
+            }
+            if (opt.out.conj) res = res.conj();
+            if (opt.out.scale != 1.0) res = res.scale(opt.out.scale);
+
+            if (opt.acc_index) {
+                result[i] = result[i].add(res);
+            } else {
+                result[i] = res;
+            }
+            if (opt.acc_total) {
+                total = total.add(res);
+            }
+        }
+        if (opt.acc_total) {
+            return .{ .re = total.re, .im = total.im };
+        }
+        return .{ .re = 0.0, .im = 0.0 };
+    }
 
     pub fn generalComplexOpSIMD(
         a: []const Complex,
@@ -660,7 +708,7 @@ pub const Complex = struct {
 
             if (b) |bSafe| {
                 const bV = prepareComplexVector(numOfComplex, bSafe.ptr + i, reMask, imMask, opt.b);
-                resV = try vOp(numOfComplex, resV, bV);
+                resV = try vOp(numOfComplex, resV, bV, opt.mode);
             }
 
             if (opt.out.conj) resV = vConj(numOfComplex, resV);
@@ -686,13 +734,13 @@ pub const Complex = struct {
 
             if (b) |bSafe| {
                 const refinedB = prepareComplex(bSafe[i], opt.b);
-                res = try res.cOp(refinedB);
+                res = try cOp(res, refinedB, opt.mode);
             }
             if (opt.out.conj) res = res.conj();
             if (opt.out.scale != 1.0) res = res.scale(opt.out.scale);
 
             if (opt.acc_index) {
-                result[i] += res;
+                result[i] = result[i].add(res);
             } else {
                 result[i] = res;
             }
