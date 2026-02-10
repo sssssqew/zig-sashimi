@@ -558,7 +558,7 @@ pub const Complex = struct {
     }
     inline fn vDiv(comptime n: usize, aV: ComplexVector(n), bV: ComplexVector(n)) ComplexError!ComplexVector(n) {
         const denom = bV.reV * bV.reV + bV.imV * bV.imV;
-        if (denom < 1e-12) return ComplexError.DivisionByZero;
+        if (@reduce(.Or, denom < @as(Vector(n), @splat(1e-12)))) return ComplexError.DivisionByZero;
         std.debug.assert(denom != 0);
 
         const reV = (aV.reV * bV.reV + aV.imV * bV.imV) / denom;
