@@ -464,7 +464,7 @@ pub fn main() !void {
     // std.debug.print("Div Sum: {d:.2} + {d:.2}i\n", .{ sum_div.re, sum_div.im });
 
     // 1. 설정값 (여기서 시퀀스 길이를 조절하세요!)
-    const seq_len: usize = 100000000;
+    const seq_len: usize = 10000000;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
@@ -506,41 +506,41 @@ pub fn main() !void {
     const total_scalar = try Complex.generalComplexOp(a, b, res_scalar, opt);
     const time_scalar = timer.read();
 
-    // // --- 캐시 플러싱 (중간에 끼워넣기) ---
-    // {
-    //     const dummy_size = 1024 * 1024 * 16; // 약 64MB
-    //     const dummy = try allocator.alloc(f32, dummy_size);
-    //     defer allocator.free(dummy);
-    //     @memset(dummy, 1.0);
+    // --- 캐시 플러싱 (중간에 끼워넣기) ---
+    {
+        const dummy_size = 1024 * 1024 * 16; // 약 64MB
+        const dummy = try allocator.alloc(f32, dummy_size);
+        defer allocator.free(dummy);
+        @memset(dummy, 1.0);
 
-    //     var s: f32 = 0;
-    //     for (dummy) |val| {
-    //         s += val; // val을 사용해서 "unused variable" 에러 방지
-    //     }
-    //     std.mem.doNotOptimizeAway(s); // 컴파일러가 루프를 삭제하지 못하게 고정
-    // }
+        var s: f32 = 0;
+        for (dummy) |val| {
+            s += val; // val을 사용해서 "unused variable" 에러 방지
+        }
+        std.mem.doNotOptimizeAway(s); // 컴파일러가 루프를 삭제하지 못하게 고정
+    }
 
     // --- SIMD 루프 측정 ---
-    // var timer = try std.time.Timer.start();
-    // const total_simd = try Complex.generalComplexOpSIMD(a, b, res_simd, opt);
-    // const time_simd = timer.read();
+    timer.reset();
+    const total_simd = try Complex.generalComplexOpSIMD(a, b, res_simd, opt);
+    const time_simd = timer.read();
 
     // 4. 결과 출력 및 오차 비교
-    // const diff_re = @abs(total_simd.re - total_scalar.re);
-    // const diff_im = @abs(total_simd.im - total_scalar.im);
+    const diff_re = @abs(total_simd.re - total_scalar.re);
+    const diff_im = @abs(total_simd.im - total_scalar.im);
 
-    // std.debug.print("1. SIMD Results:\n", .{});
-    // std.debug.print("   - Time: {d:>10} ns ({d:.2} ms)\n", .{ time_simd, @as(f64, @floatFromInt(time_simd)) / 1_000_000.0 });
-    // std.debug.print("   - Sum : {d:.4} + {d:.4}i\n\n", .{ total_simd.re, total_simd.im });
+    std.debug.print("1. SIMD Results:\n", .{});
+    std.debug.print("   - Time: {d:>10} ns ({d:.2} ms)\n", .{ time_simd, @as(f64, @floatFromInt(time_simd)) / 1_000_000.0 });
+    std.debug.print("   - Sum : {d:.4} + {d:.4}i\n\n", .{ total_simd.re, total_simd.im });
 
     std.debug.print("2. Scalar Results:\n", .{});
     std.debug.print("   - Time: {d:>10} ns ({d:.2} ms)\n", .{ time_scalar, @as(f64, @floatFromInt(time_scalar)) / 1_000_000.0 });
     std.debug.print("   - Sum : {d:.4} + {d:.4}i\n\n", .{ total_scalar.re, total_scalar.im });
 
-    // std.debug.print("3. Comparison:\n", .{});
-    // std.debug.print("   - Speedup: {d:.2}x\n", .{@as(f64, @floatFromInt(time_scalar)) / @as(f64, @floatFromInt(time_simd))});
-    // std.debug.print("   - Total Sum Error: Re({e}), Im({e})\n", .{ diff_re, diff_im });
+    std.debug.print("3. Comparison:\n", .{});
+    std.debug.print("   - Speedup: {d:.2}x\n", .{@as(f64, @floatFromInt(time_scalar)) / @as(f64, @floatFromInt(time_simd))});
+    std.debug.print("   - Total Sum Error: Re({e}), Im({e})\n", .{ diff_re, diff_im });
 
-    // const vectorSize: usize = std.simd.suggestVectorLength(f32) orelse 4;
-    // std.debug.print("Vector size: {d}\n", .{vectorSize});
+    const vectorSize: usize = std.simd.suggestVectorLength(f32) orelse 4;
+    std.debug.print("Vector size: {d}\n", .{vectorSize});
 }
