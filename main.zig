@@ -1,7 +1,9 @@
 const std = @import("std");
 const S4Layer = @import("S4.zig").S4Layer;
 const S4Trainer = @import("S4Trainer.zig");
-const Complex = @import("Complex.zig").Complex;
+const ComplexLib = @import("Complex.zig");
+const Complex = ComplexLib.Complex;
+const ComplexSoA = ComplexLib.ComplexSoA;
 
 fn generateSignal(freq: f32, t: f32) Complex {
     return std.math.sin(freq * t);
@@ -464,7 +466,7 @@ pub fn main() !void {
     // std.debug.print("Div Sum: {d:.2} + {d:.2}i\n", .{ sum_div.re, sum_div.im });
 
     // 1. 설정값 (여기서 시퀀스 길이를 조절하세요!)
-    const seq_len: usize = 10000000;
+    const seq_len: usize = 100000000;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
@@ -490,9 +492,23 @@ pub fn main() !void {
         res_simd[i] = Complex.init(0, 0);
         res_scalar[i] = Complex.init(0, 0);
     }
+    var aSplit = try ComplexSoA.init(allocator, a.len);
+    defer aSplit.deinit();
 
-    const opt = Complex.convOptions{
-        .mode = .mul, // mul, add, sub, div 중 선택
+    ComplexSoA.AoStoSoAConverter(a, aSplit);
+
+    var bSplit = try ComplexSoA.init(allocator, a.len);
+    defer bSplit.deinit();
+
+    ComplexSoA.AoStoSoAConverter(b, bSplit);
+
+    var result = try ComplexSoA.init(allocator, a.len);
+    defer result.deinit();
+
+    ComplexSoA.AoStoSoAConverter(res_simd, result);
+
+    const opt = ComplexLib.convOptions{
+        .mode = .div, // mul, add, sub, div 중 선택
         .a = .{ .conj = true, .scale = 1.5 },
         .b = .{ .conj = false, .scale = 0.8 },
         .out = .{ .conj = true, .scale = 2.0 },
@@ -501,12 +517,12 @@ pub fn main() !void {
 
     std.debug.print("Benchmarking with sequence length: {d}\n\n", .{seq_len});
 
-    // --- 일반 루프 측정 ---
+    // // --- 일반 루프 측정 ---
     var timer = try std.time.Timer.start();
-    const total_scalar = try Complex.generalComplexOp(a, b, res_scalar, opt);
-    const time_scalar = timer.read();
+    const total_simd = try ComplexSoA.generalComplexOpSIMDSoA(aSplit, bSplit, result, opt);
+    const time_simd = timer.read();
 
-    // --- 캐시 플러싱 (중간에 끼워넣기) ---
+    // // --- 캐시 플러싱 (중간에 끼워넣기) ---
     {
         const dummy_size = 1024 * 1024 * 16; // 약 64MB
         const dummy = try allocator.alloc(f32, dummy_size);
@@ -520,12 +536,13 @@ pub fn main() !void {
         std.mem.doNotOptimizeAway(s); // 컴파일러가 루프를 삭제하지 못하게 고정
     }
 
-    // --- SIMD 루프 측정 ---
     timer.reset();
-    const total_simd = try Complex.generalComplexOpSIMD(a, b, res_simd, opt);
-    const time_simd = timer.read();
+    const total_scalar = try Complex.generalComplexOp(a, b, res_scalar, opt);
+    const time_scalar = timer.read();
 
-    // 4. 결과 출력 및 오차 비교
+    // // --- SIMD 루프 측정 ---
+
+    // // 4. 결과 출력 및 오차 비교
     const diff_re = @abs(total_simd.re - total_scalar.re);
     const diff_im = @abs(total_simd.im - total_scalar.im);
 
@@ -541,6 +558,28 @@ pub fn main() !void {
     std.debug.print("   - Speedup: {d:.2}x\n", .{@as(f64, @floatFromInt(time_scalar)) / @as(f64, @floatFromInt(time_simd))});
     std.debug.print("   - Total Sum Error: Re({e}), Im({e})\n", .{ diff_re, diff_im });
 
-    const vectorSize: usize = std.simd.suggestVectorLength(f32) orelse 4;
-    std.debug.print("Vector size: {d}\n", .{vectorSize});
+    // const vectorSize: usize = std.simd.suggestVectorLength(f32) orelse 4;
+    // std.debug.print("Vector size: {d}\n", .{vectorSize});
+
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // const allocator = gpa.allocator();
+    // var result = try ComplexSoA.init(allocator, a.len);
+    // defer result.deinit();
+
+    // ComplexSoA.AoStoSoAConverter(a, result);
+
+    // for (a) |item| {
+    //     std.debug.print("{d:.2}, {d:.2} @", .{ item.re, item.im });
+    // }
+    // std.debug.print("\n\n", .{});
+    // std.debug.print("re: ", .{});
+    // for (result.re) |re| {
+    //     std.debug.print("{d:.2}, ", .{re});
+    // }
+    // std.debug.print("\nim: ", .{});
+    // for (result.im) |im| {
+    //     std.debug.print("{d:.2}, ", .{im});
+    // }
+    // std.debug.print("\n", .{});
+
 }
