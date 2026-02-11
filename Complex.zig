@@ -677,11 +677,7 @@ pub const Complex = extern struct {
 
             if (b) |bSafe| {
                 const refinedB = prepareComplex(bSafe[i], opt.b);
-                const x = try cOp(res, refinedB, opt.mode);
-                const y = try cOp(res, refinedB, opt.mode);
-                const xx = try cOp(x, x, opt.mode);
-                const yy = try cOp(y, y, opt.mode);
-                res = try cOp(xx, yy, opt.mode);
+                res = try cOp(res, refinedB, opt.mode);
             }
             if (opt.out.conj) res = res.conj();
             if (opt.out.scale != 1.0) res = res.scale(opt.out.scale);
@@ -821,70 +817,6 @@ pub const ComplexSoA = struct {
         return cv;
     }
 
-    // pub fn generalComplexOpSIMDSoA(
-    //     a: ComplexSoA,
-    //     b: ?ComplexSoA,
-    //     result: ComplexSoA,
-    //     comptime opt: convOptions,
-    // ) !Complex {
-    //     const vectorSize: usize = std.simd.suggestVectorLength(f32) orelse 4;
-    //     const len = a.re.len;
-
-    //     var i: usize = 0;
-    //     var totalReV: Vector(vectorSize) = @splat(0.0);
-    //     var totalImV: Vector(vectorSize) = @splat(0.0);
-    //     while (i + vectorSize <= len) : (i += vectorSize) {
-    //         var resV: ComplexVector(vectorSize) = prepareComplexVectorSoA(vectorSize, a, i, opt.a);
-
-    //         if (b) |bSafe| {
-    //             const bV: ComplexVector(vectorSize) = prepareComplexVectorSoA(vectorSize, bSafe, i, opt.b);
-    //             resV = try vOp(vectorSize, resV, bV, opt.mode);
-    //         }
-
-    //         if (opt.out.conj) resV = vConj(vectorSize, resV);
-    //         if (opt.out.scale != 1.0) resV = vScale(vectorSize, resV, opt.out.scale);
-
-    //         if (opt.acc_index) {
-    //             const currentVal: ComplexVector(vectorSize) = vLoadSoA(result, i, vectorSize); // 1. 기존 메모리 값을 로드 (복소수 n개만큼)
-    //             const accV: ComplexVector(vectorSize) = .{ .reV = currentVal.reV + resV.reV, .imV = currentVal.imV + resV.imV };
-    //             vStoreSoA(result, i, vectorSize, accV);
-    //         } else {
-    //             vStoreSoA(result, i, vectorSize, resV);
-    //         }
-
-    //         if (opt.acc_total) {
-    //             totalReV += resV.reV;
-    //             totalImV += resV.imV;
-    //         }
-    //     }
-    //     var total: Complex = Complex.init(0.0, 0.0);
-    //     while (i < len) : (i += 1) {
-    //         var res = prepareComplex(Complex.init(a.re[i], a.im[i]), opt.a);
-
-    //         if (b) |bSafe| {
-    //             const refinedB = prepareComplex(Complex.init(bSafe.re[i], bSafe.im[i]), opt.b);
-    //             res = try cOp(res, refinedB, opt.mode);
-    //         }
-    //         if (opt.out.conj) res = res.conj();
-    //         if (opt.out.scale != 1.0) res = res.scale(opt.out.scale);
-
-    //         if (opt.acc_index) {
-    //             result.re[i] += res.re;
-    //             result.im[i] += res.im;
-    //         } else {
-    //             result.re[i] = res.re;
-    //             result.im[i] = res.im;
-    //         }
-    //         if (opt.acc_total) {
-    //             total = total.add(res);
-    //         }
-    //     }
-    //     if (opt.acc_total) {
-    //         return .{ .re = @reduce(.Add, totalReV) + total.re, .im = @reduce(.Add, totalImV) + total.im };
-    //     }
-    //     return .{ .re = 0.0, .im = 0.0 };
-    // }
-
     pub fn generalComplexOpSIMDSoA(
         a: ComplexSoA,
         b: ?ComplexSoA,
@@ -902,11 +834,7 @@ pub const ComplexSoA = struct {
 
             if (b) |bSafe| {
                 const bV: ComplexVector(vectorSize) = prepareComplexVectorSoA(vectorSize, bSafe, i, opt.b);
-                const x: ComplexVector(vectorSize) = try vOp(vectorSize, resV, bV, opt.mode);
-                const y: ComplexVector(vectorSize) = try vOp(vectorSize, resV, bV, opt.mode);
-                const xx: ComplexVector(vectorSize) = try vOp(vectorSize, x, x, opt.mode);
-                const yy: ComplexVector(vectorSize) = try vOp(vectorSize, y, y, opt.mode);
-                resV = try vOp(vectorSize, xx, yy, opt.mode);
+                resV = try vOp(vectorSize, resV, bV, opt.mode);
             }
 
             if (opt.out.conj) resV = vConj(vectorSize, resV);
@@ -931,11 +859,7 @@ pub const ComplexSoA = struct {
 
             if (b) |bSafe| {
                 const refinedB = prepareComplex(Complex.init(bSafe.re[i], bSafe.im[i]), opt.b);
-                const x = try cOp(res, refinedB, opt.mode);
-                const y = try cOp(res, refinedB, opt.mode);
-                const xx = try cOp(x, x, opt.mode);
-                const yy = try cOp(y, y, opt.mode);
-                res = try cOp(xx, yy, opt.mode);
+                res = try cOp(res, refinedB, opt.mode);
             }
             if (opt.out.conj) res = res.conj();
             if (opt.out.scale != 1.0) res = res.scale(opt.out.scale);
